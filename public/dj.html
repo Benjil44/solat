@@ -201,14 +201,24 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .autodj-btn:hover{border-color:var(--accent);color:var(--accent)}
 .autodj-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);
   animation:pulse-border 1.5s infinite}
-#playlist-tracks{display:flex;flex-direction:column;gap:3px;max-height:210px;overflow-y:auto}
+#playlist-tracks{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow-y:auto;
+  border-radius:6px;transition:.15s}
+#playlist-tracks.files-over{outline:2px dashed var(--accent);background:#1a0a00}
 .pl-empty{color:var(--muted);font-size:.82em;text-align:center;padding:18px 0}
 .pl-item{display:flex;align-items:center;gap:8px;padding:6px 10px;
   background:#0d0d0d;border-radius:6px;border:1px solid transparent;
-  font-size:.82em;user-select:none}
+  font-size:.82em;user-select:none;transition:opacity .15s;position:relative}
 .pl-item:hover{border-color:#333}
 .pl-item.active{border-color:var(--accent);background:#1a0800}
 .pl-item.next-up{border-color:#3a3a00;background:#111800}
+.pl-item.dragging{opacity:.35}
+.pl-item.drop-above::before{content:'';position:absolute;top:-2px;left:4px;right:4px;
+  height:2px;background:var(--accent);border-radius:2px}
+.pl-item.drop-below::after{content:'';position:absolute;bottom:-2px;left:4px;right:4px;
+  height:2px;background:var(--accent);border-radius:2px}
+.pl-handle{color:#444;font-size:.9em;cursor:grab;flex-shrink:0;padding:0 2px;
+  line-height:1;letter-spacing:-.5px}
+.pl-handle:hover{color:#888}
 .pl-num{color:var(--muted);min-width:22px;text-align:right;font-size:.75em;flex-shrink:0}
 .pl-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
 .pl-dur{color:var(--muted);min-width:40px;text-align:right;font-size:.78em;flex-shrink:0}
@@ -467,8 +477,11 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="autodj-btn" id="autoDJBtn" onclick="toggleAutoDJ()">▶▶ AUTO DJ</button>
     </div>
   </div>
-  <div id="playlist-tracks">
-    <div class="pl-empty">No tracks — click "+ Add Tracks" to load music files</div>
+  <div id="playlist-tracks"
+    ondragover="plTracksDragOver(event)"
+    ondragleave="plTracksDragLeave(event)"
+    ondrop="plTracksDrop(event)">
+    <div class="pl-empty">No tracks — click "+ Add Tracks" or drop audio files here</div>
   </div>
 </div>
 
@@ -1188,7 +1201,8 @@ function toast(msg, isErr) {
 // ═══════════════════════════════════════════════════════════════
 //  PLAYLIST
 // ═══════════════════════════════════════════════════════════════
-let playlist = [];  // { name, duration, buffer }
+let playlist   = [];   // { name, duration, buffer }
+let dragSrcIdx = null; // index of playlist item being dragged for reorder
 
 async function addToPlaylist(files) {
   if (!files || !files.length) return;
@@ -1252,7 +1266,13 @@ function renderPlaylist() {
     const isCurrent = autoDJActive && i === autoDJCurrentIdx;
     const isNext    = autoDJActive && i === autoDJCurrentIdx + 1;
     let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '');
-    return `<div class="${cls}" id="pl-item-${i}">
+    return `<div class="${cls}" id="pl-item-${i}" draggable="true"
+      ondragstart="plItemDragStart(event,${i})"
+      ondragend="plItemDragEnd(event)"
+      ondragover="plItemDragOver(event,${i})"
+      ondragleave="plItemDragLeave(event)"
+      ondrop="plItemDrop(event,${i})">
+      <span class="pl-handle" title="Drag to reorder">⠿⠿</span>
       <span class="pl-num">${isCurrent ? '▶' : i + 1}</span>
       <span class="pl-name" title="${esc(t.name)}">${esc(t.name)}</span>
       <span class="pl-dur">${fmtTime(t.duration)}</span>
@@ -1261,6 +1281,102 @@ function renderPlaylist() {
       <button class="pl-del" onclick="removeFromPlaylist(${i})">✕</button>
     </div>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLAYLIST DRAG & DROP
+// ═══════════════════════════════════════════════════════════════
+
+// ── External files dragged over the tracks container ───────────
+function plTracksDragOver(e) {
+  e.preventDefault();
+  if ([...e.dataTransfer.types].includes('Files')) {
+    e.dataTransfer.dropEffect = 'copy';
+    document.getElementById('playlist-tracks').classList.add('files-over');
+  } else {
+    e.dataTransfer.dropEffect = 'move';
+  }
+}
+function plTracksDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget))
+    document.getElementById('playlist-tracks').classList.remove('files-over');
+}
+function plTracksDrop(e) {
+  e.preventDefault();
+  document.getElementById('playlist-tracks').classList.remove('files-over');
+  if (e.dataTransfer.files.length) {
+    addToPlaylist(e.dataTransfer.files);
+    return;
+  }
+  // Internal reorder: dropped on empty space → append dragged item to end
+  if (dragSrcIdx !== null) {
+    const src = dragSrcIdx; dragSrcIdx = null;
+    if (src < playlist.length - 1) {
+      const item = playlist.splice(src, 1)[0];
+      playlist.push(item);
+      if (autoDJActive) {
+        if (autoDJCurrentIdx === src) autoDJCurrentIdx = playlist.length - 1;
+        else if (autoDJCurrentIdx > src) autoDJCurrentIdx--;
+      }
+      renderPlaylist();
+    }
+  }
+}
+
+// ── Item drag for reorder ──────────────────────────────────────
+function plItemDragStart(e, idx) {
+  dragSrcIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(idx));
+  requestAnimationFrame(() => {
+    const el = document.getElementById('pl-item-' + idx);
+    if (el) el.classList.add('dragging');
+  });
+}
+function plItemDragEnd(e) {
+  dragSrcIdx = null;
+  document.querySelectorAll('.pl-item').forEach(el =>
+    el.classList.remove('dragging', 'drop-above', 'drop-below'));
+}
+function plItemDragOver(e, idx) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (dragSrcIdx === null || dragSrcIdx === idx) return;
+  e.dataTransfer.dropEffect = 'move';
+  const el = document.getElementById('pl-item-' + idx);
+  const mid = el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
+  document.querySelectorAll('.pl-item').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+  el.classList.add(e.clientY < mid ? 'drop-above' : 'drop-below');
+}
+function plItemDragLeave(e) {
+  e.currentTarget.classList.remove('drop-above', 'drop-below');
+}
+function plItemDrop(e, targetIdx) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.querySelectorAll('.pl-item').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+  if (dragSrcIdx === null || dragSrcIdx === targetIdx) { dragSrcIdx = null; return; }
+
+  const src = dragSrcIdx; dragSrcIdx = null;
+  const el  = document.getElementById('pl-item-' + targetIdx);
+  const mid = el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
+  let insertAt = e.clientY < mid ? targetIdx : targetIdx + 1;
+
+  const item = playlist.splice(src, 1)[0];
+  if (insertAt > src) insertAt--;
+  playlist.splice(insertAt, 0, item);
+
+  // Keep autoDJCurrentIdx pointing at the same track after reorder
+  if (autoDJActive) {
+    if (autoDJCurrentIdx === src) {
+      autoDJCurrentIdx = insertAt;
+    } else if (src < autoDJCurrentIdx && insertAt >= autoDJCurrentIdx) {
+      autoDJCurrentIdx--;
+    } else if (src > autoDJCurrentIdx && insertAt <= autoDJCurrentIdx) {
+      autoDJCurrentIdx++;
+    }
+  }
+  renderPlaylist();
 }
 
 // ═══════════════════════════════════════════════════════════════
