@@ -243,7 +243,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
     <!-- Load track -->
     <div class="load-area" id="loadA" ondragover="dragOver(event,'A')" ondrop="dropFile(event,'A')" ondragleave="dragLeave('A')">
-      <input type="file" accept="audio/*" onchange="loadFile(event,'A')">
+      <input type="file" id="fileInputA" accept="audio/*" onchange="loadFile(event,'A')">
       <div class="icon">🎵</div>
       <div class="hint">Click or drag a music file here</div>
     </div>
@@ -322,7 +322,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="cf-track">
         <button class="cf-fade-btn a" id="cfBtnA" onclick="manualFade(0)" title="Fade to Deck A">◀ A</button>
         <input type="range" id="crossfader" min="0" max="1" step="0.01" value="0.5"
-          oninput="setCrossfader(this.value)">
+          oninput="userMovedCrossfader(this.value)">
         <button class="cf-fade-btn b" id="cfBtnB" onclick="manualFade(1)" title="Fade to Deck B">B ▶</button>
       </div>
       <div class="cf-time-row">
@@ -375,7 +375,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="deck-label">Deck B</div>
 
     <div class="load-area" id="loadB" ondragover="dragOver(event,'B')" ondrop="dropFile(event,'B')" ondragleave="dragLeave('B')">
-      <input type="file" accept="audio/*" onchange="loadFile(event,'B')">
+      <input type="file" id="fileInputB" accept="audio/*" onchange="loadFile(event,'B')">
       <div class="icon">🎵</div>
       <div class="hint">Click or drag a music file here</div>
     </div>
@@ -499,8 +499,9 @@ masterGain.gain.value = 0.9;
 const decks = { A: makeDeck(), B: makeDeck() };
 
 // ── Crossfader manual fade state ──────────────────────────────
-let cfFadeSec  = 8;    // manual fade duration (seconds)
-let cfAnimVer  = 0;    // increment to cancel any in-progress fade animation
+let cfFadeSec    = 8;    // manual fade duration (seconds)
+let cfAnimVer    = 0;    // increment to cancel any in-progress fade animation
+let pendingFadeTo = null; // set when waiting for a file load before fading
 
 // ── Auto DJ state (declared here to avoid TDZ in RAF loop) ────
 let autoDJActive        = false;
@@ -579,6 +580,16 @@ function setCrossfader(v) {
   decks.B.outGain.gain.value = cf;
 }
 
+// Called when user physically drags the slider — cancels any running animation
+function userMovedCrossfader(v) {
+  cfAnimVer++;                       // cancel running fade
+  if (autoDJTransitioning) {         // let DJ take over from Auto DJ mid-fade
+    autoDJTransitioning = false;
+    setCfAutoStatus('');
+  }
+  setCrossfader(v);
+}
+
 function setMasterVol(v) {
   masterGain.gain.value = parseFloat(v);
   document.getElementById('masterVolVal').textContent = Math.round(v * 100) + '%';
@@ -620,6 +631,12 @@ function decodeFile(file, id) {
       document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
       drawWaveform(buffer, id);
       toast('Loaded: ' + file.name.slice(0, 40));
+      // If a manual fade was waiting for this deck, trigger it now
+      if (pendingFadeTo !== null && (pendingFadeTo === 1 ? 'B' : 'A') === id) {
+        const fadeTo = pendingFadeTo;
+        pendingFadeTo = null;
+        setTimeout(() => manualFade(fadeTo), 100);
+      }
     } catch (err) {
       toast('Could not decode audio file', true);
     }
@@ -1355,8 +1372,24 @@ function startAutoDJTransition(nextIdx) {
 }
 
 function manualFade(to) {
+  const toDeckId = to === 1 ? 'B' : 'A';
+  const deck = decks[toDeckId];
+
+  // Target deck has no track — open file browser; fade will start after load
+  if (!deck.buffer) {
+    pendingFadeTo = to;
+    document.getElementById('fileInput' + toDeckId).click();
+    toast('Select a track for Deck ' + toDeckId + ' — crossfade will start automatically');
+    return;
+  }
+
+  // Track loaded but not playing — start it first
+  if (!deck.playing) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    playDeck(toDeckId, deck.pauseOffset || 0);
+  }
+
   const from = parseFloat(document.getElementById('crossfader').value);
-  if (Math.abs(from - to) < 0.02) return;  // already there
   setCfAutoStatus(to === 1 ? 'A ──→ B' : 'B ──→ A');
   animateCrossfader(from, to, cfFadeSec, () => setCfAutoStatus(''));
 }
