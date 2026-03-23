@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Live Stream</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      padding: 20px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .logo h1 {
+      font-size: 2.4em;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #ff4400;
+      text-transform: uppercase;
+    }
+
+    .logo p {
+      color: #888;
+      margin-top: 6px;
+      font-size: 0.95em;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      margin-bottom: 24px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #333;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 14px;
+      background: #111;
+      color: #888;
+      border: none;
+      cursor: pointer;
+      font-size: 1em;
+      font-weight: bold;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .tab-btn.active {
+      background: #ff4400;
+      color: #fff;
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: #ccc;
+      font-size: 0.9em;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      background: #1a1a1a;
+      border: 2px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1.05em;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: #ff4400;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 16px;
+      background: #ff4400;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+
+    .btn:hover { background: #e03d00; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { background: #555; cursor: not-allowed; }
+
+    .msg {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 18px;
+      font-size: 0.95em;
+      display: none;
+    }
+
+    .msg.error { background: #2a0a0a; border: 1px solid #aa2222; color: #ff6666; }
+    .msg.success { background: #0a2a0a; border: 1px solid #22aa22; color: #66ff66; }
+
+    .free-badge {
+      text-align: center;
+      margin-top: 20px;
+      padding: 12px;
+      background: #1a1a00;
+      border: 1px solid #554400;
+      border-radius: 8px;
+      color: #ffcc00;
+      font-size: 0.88em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>DJ LIVE</h1>
+      <p>Live streaming — connect and enjoy</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('login')">Login</button>
+      <button class="tab-btn" onclick="showTab('register')">Register</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- Login form -->
+    <div id="login-form">
+      <div class="form-group">
+        <label>USERNAME</label>
+        <input type="text" id="login-user" placeholder="Enter your username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>PASSWORD</label>
+        <input type="password" id="login-pass" placeholder="Enter your password" autocomplete="current-password">
+      </div>
+      <button class="btn" id="login-btn" onclick="doLogin()">WATCH LIVE</button>
+    </div>
+
+    <!-- Register form -->
+    <div id="register-form" style="display:none">
+      <div class="form-group">
+        <label>USERNAME</label>
+        <input type="text" id="reg-user" placeholder="Choose a username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>PASSWORD</label>
+        <input type="password" id="reg-pass" placeholder="Choose a password (min 6 chars)" autocomplete="new-password">
+      </div>
+      <button class="btn" id="reg-btn" onclick="doRegister()">CREATE ACCOUNT</button>
+    </div>
+
+    <div class="free-badge">
+      FREE for 6 months after registration — no payment needed now
+    </div>
+  </div>
+
+  <script>
+    function showTab(tab) {
+      document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+      document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+      document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', (i === 0) === (tab === 'login'));
+      });
+      showMsg('', '');
+    }
+
+    function showMsg(text, type) {
+      const el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = 'msg ' + type;
+      el.style.display = text ? 'block' : 'none';
+    }
+
+    async function doLogin() {
+      const btn = document.getElementById('login-btn');
+      const username = document.getElementById('login-user').value.trim();
+      const password = document.getElementById('login-pass').value;
+
+      if (!username || !password) return showMsg('Please fill in all fields', 'error');
+
+      btn.disabled = true;
+      btn.textContent = 'Logging in...';
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showMsg(data.error || 'Login failed', 'error');
+        } else {
+          window.location.href = '/watch.html';
+        }
+      } catch {
+        showMsg('Network error — please try again', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'WATCH LIVE';
+      }
+    }
+
+    async function doRegister() {
+      const btn = document.getElementById('reg-btn');
+      const username = document.getElementById('reg-user').value.trim();
+      const password = document.getElementById('reg-pass').value;
+
+      if (!username || !password) return showMsg('Please fill in all fields', 'error');
+
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      try {
+        const res = await fetch('/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showMsg(data.error || 'Registration failed', 'error');
+        } else {
+          showMsg('Account created! Redirecting...', 'success');
+          setTimeout(() => window.location.href = '/watch.html', 1000);
+        }
+      } catch {
+        showMsg('Network error — please try again', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'CREATE ACCOUNT';
+      }
+    }
+
+    // Allow Enter key on inputs
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const loginVisible = document.getElementById('login-form').style.display !== 'none';
+        if (loginVisible) doLogin(); else doRegister();
+      }
+    });
+  </script>
+</body>
+</html>

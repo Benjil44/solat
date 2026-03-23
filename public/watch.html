@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Live Stream</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #ff4400; --bg: #000; --panel: rgba(0,0,0,0.85);
+      --card: #111; --border: #222;
+    }
+
+    body { background: var(--bg); color: #fff; font-family: Arial,Helvetica,sans-serif;
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Top bar ── */
+    #topbar { display:flex; align-items:center; justify-content:space-between;
+      padding:10px 16px; background:var(--panel); z-index:10; flex-shrink:0; gap:10px; }
+    #topbar h1 { font-size:1.2em; font-weight:900; color:var(--accent); letter-spacing:2px; white-space:nowrap; }
+    #stream-title { font-size:.85em; color:#aaa; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .user-info { display:flex; align-items:center; gap:10px; font-size:.82em; flex-shrink:0; }
+    #sub-badge { padding:3px 9px; border-radius:20px; font-size:.75em; font-weight:bold; }
+    .badge-trial   { background:#332200; color:#ffcc00; }
+    .badge-paid    { background:#002211; color:#44ff88; }
+    .badge-expired { background:#220000; color:#ff6666; }
+    .logout-btn { background:transparent; border:1px solid #444; color:#aaa;
+      padding:4px 10px; border-radius:6px; cursor:pointer; font-size:.82em; }
+    .logout-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ── Main area ── */
+    #main { flex:1; display:flex; overflow:hidden; }
+
+    /* ── Video side ── */
+    #video-side { flex:1; position:relative; background:#000; display:flex; flex-direction:column; }
+    #video-wrap  { flex:1; position:relative; display:flex; align-items:center; justify-content:center; }
+
+    /* Hidden video — still plays audio */
+    video { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+
+    /* Now-playing display */
+    #now-playing { width:100%; height:100%; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:22px; padding:20px; }
+    #cover-wrap { position:relative; width:min(280px,60vw); aspect-ratio:1;
+      border-radius:16px; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.7); flex-shrink:0; }
+    #cover-img { width:100%; height:100%; object-fit:cover; display:none; border-radius:16px; }
+    #cover-placeholder { width:100%; height:100%; background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; border-radius:16px; }
+    #cover-placeholder .disc { font-size:5em; animation:spin-slow 4s linear infinite; }
+    @keyframes spin-slow { to { transform:rotate(360deg); } }
+    #now-title { font-size:clamp(1em,3vw,1.6em); font-weight:900; text-align:center;
+      color:#fff; letter-spacing:1px; max-width:400px; line-height:1.3; }
+    #now-sub { font-size:.8em; color:#666; letter-spacing:2px; text-transform:uppercase; }
+
+    /* Pulsing glow when live */
+    #cover-wrap.live { animation:glow-pulse 2s ease-in-out infinite; }
+    @keyframes glow-pulse {
+      0%,100% { box-shadow:0 8px 40px rgba(255,68,0,.3); }
+      50%      { box-shadow:0 8px 60px rgba(255,68,0,.7); }
+    }
+
+    /* overlay (offline / buffering / tap-to-play) */
+    #overlay { position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; background:rgba(0,0,0,.88); z-index:5; }
+    #overlay-icon { font-size:3.5em; margin-bottom:14px; }
+    #overlay-title { font-size:1.5em; font-weight:bold; margin-bottom:8px; }
+    #overlay-sub   { color:#888; font-size:.9em; text-align:center; max-width:280px; line-height:1.5; }
+    .spinner { width:44px; height:44px; border:5px solid #333; border-top-color:var(--accent);
+      border-radius:50%; animation:spin .8s linear infinite; margin-bottom:14px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* LIVE badge */
+    #live-badge { position:absolute; top:12px; left:12px; background:var(--accent); color:#fff;
+      font-size:.75em; font-weight:bold; padding:3px 9px; border-radius:4px; letter-spacing:1px;
+      z-index:6; display:none; }
+
+    /* ── Buffer progress bar (top of screen while loading) ── */
+    #buf-bar { position:fixed; top:0; left:0; height:3px; width:0%;
+      background:var(--accent); z-index:100; transition:width .4s ease; pointer-events:none; }
+
+    /* ── Bottom controls ── */
+    #bottombar { padding:8px 14px; background:var(--panel); display:flex;
+      align-items:center; gap:12px; flex-shrink:0; }
+    #vol-label { font-size:.8em; color:#888; }
+    input[type=range] { accent-color:var(--accent); cursor:pointer; }
+    #volume { width:100px; }
+    #fullscreen-btn { margin-left:auto; background:transparent; border:1px solid #444;
+      color:#ccc; padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em; }
+    #fullscreen-btn:hover { border-color:var(--accent); color:var(--accent); }
+    #chat-toggle-btn { background:transparent; border:1px solid #444; color:#ccc;
+      padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em; }
+    #chat-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
+    #chat-toggle-btn.active { border-color:var(--accent); color:var(--accent); background:#1a0800; }
+
+    /* ── Chat panel ── */
+    #chat-panel { width:0; display:flex; flex-direction:column; background:var(--card);
+      border-left:1px solid var(--border); transition:width .25s; overflow:hidden; flex-shrink:0; }
+    #chat-panel.open { width:280px; }
+    .chat-header { padding:10px 14px; border-bottom:1px solid var(--border);
+      font-size:.75em; font-weight:bold; color:#666; letter-spacing:1px; flex-shrink:0; }
+    #chat-messages { flex:1; overflow-y:auto; padding:10px 12px;
+      display:flex; flex-direction:column; gap:5px; }
+    .chat-msg { font-size:.8em; line-height:1.4; word-break:break-word; }
+    .chat-msg .who { font-weight:bold; margin-right:5px; }
+    .chat-msg.dj .who { color:var(--accent); }
+    .chat-msg.viewer .who { color:#88aaff; }
+    .chat-msg.system { color:#555; font-style:italic; }
+    .chat-input-row { display:flex; gap:6px; padding:8px 10px;
+      border-top:1px solid var(--border); flex-shrink:0; }
+    .chat-input { flex:1; padding:7px 10px; background:#0a0a0a;
+      border:1px solid var(--border); border-radius:6px; color:#fff; font-size:.82em; outline:none; }
+    .chat-input:focus { border-color:var(--accent); }
+    .chat-send-btn { padding:7px 12px; background:var(--accent); border:none;
+      color:#fff; border-radius:6px; cursor:pointer; font-size:.8em; font-weight:bold; }
+    .chat-send-btn:hover { background:#e03d00; }
+  </style>
+</head>
+<body>
+
+  <div id="buf-bar"></div>
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <h1>DJ LIVE</h1>
+    <span id="stream-title"></span>
+    <div class="user-info">
+      <span id="username-display"></span>
+      <span id="sub-badge" class="badge-trial">...</span>
+      <button class="logout-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+
+    <!-- Video side -->
+    <div id="video-side">
+      <div id="video-wrap">
+        <span id="live-badge">LIVE</span>
+        <!-- audio-only video element (invisible) -->
+        <video id="player" autoplay playsinline muted></video>
+
+        <!-- Now-playing display -->
+        <div id="now-playing">
+          <div id="cover-wrap">
+            <img id="cover-img" alt="Cover art">
+            <div id="cover-placeholder">
+              <span class="disc">💿</span>
+            </div>
+          </div>
+          <div id="now-title">DJ Live Session</div>
+          <div id="now-sub">LIVE STREAM</div>
+        </div>
+
+        <div id="overlay">
+          <div class="spinner"></div>
+          <div id="overlay-title">Connecting...</div>
+          <div id="overlay-sub">Please wait a moment</div>
+        </div>
+      </div>
+      <div id="bottombar">
+        <span id="vol-label">Vol</span>
+        <input type="range" id="volume" min="0" max="1" step="0.05" value="0.8"
+          oninput="setVolume(this.value)" id="volume">
+        <button id="chat-toggle-btn" onclick="toggleChat()">💬 Chat</button>
+        <button id="fullscreen-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+      </div>
+    </div>
+
+    <!-- Chat panel -->
+    <div id="chat-panel">
+      <div class="chat-header">LIVE CHAT</div>
+      <div id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" type="text"
+          placeholder="Say something..." maxlength="200"
+          onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-send-btn" onclick="sendChat()">→</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const video    = document.getElementById('player');
+    const overlay  = document.getElementById('overlay');
+    const liveBadge = document.getElementById('live-badge');
+    const bufBar   = document.getElementById('buf-bar');
+    let hls = null, pollTimer = null, heartbeatTimer = null;
+    let isPlaying = false, chatOpen = false, wsChat = null;
+    let userToken = null;
+
+    // ── Volume persistence ────────────────────────────────────
+    const savedVol = parseFloat(localStorage.getItem('djVol') ?? '0.8');
+    const volSlider = document.getElementById('volume');
+    volSlider.value = savedVol;
+    video.volume = savedVol;
+
+    // ── Init ─────────────────────────────────────────────────
+    async function init() {
+      const res = await fetch('/auth/me');
+      if (!res.ok) { window.location.href = '/'; return; }
+      const data = await res.json();
+
+      document.getElementById('username-display').textContent = data.username;
+      const badge = document.getElementById('sub-badge');
+      if (data.subscription.type === 'trial') {
+        badge.textContent = `FREE − ${data.subscription.daysLeft}d`;
+        badge.className = 'badge-trial';
+      } else if (data.subscription.type === 'paid') {
+        badge.textContent = `MEMBER − ${data.subscription.daysLeft}d`;
+        badge.className = 'badge-paid';
+      } else {
+        badge.textContent = 'EXPIRED';
+        badge.className = 'badge-expired';
+      }
+
+      // Get a token for chat — re-login to get token string from cookie
+      // We pass it via the login response which sets the cookie;
+      // for WS auth we'll call a dedicated endpoint
+      const tokenRes = await fetch('/auth/token');
+      if (tokenRes.ok) {
+        const td = await tokenRes.json();
+        userToken = td.token;
+      }
+
+      pollStatus();
+      heartbeatTimer = setInterval(() => fetch('/api/heartbeat', { method:'POST' }).catch(()=>{}), 15000);
+      connectChat();
+    }
+
+    // ── Poll stream ───────────────────────────────────────────
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) { scheduleNextPoll(); return; }
+        const d = await res.json();
+
+        if (d.title) {
+          document.getElementById('stream-title').textContent = d.title;
+          document.getElementById('now-title').textContent = d.title;
+        }
+        // Cover art or placeholder
+        const coverImg = document.getElementById('cover-img');
+        const placeholder = document.getElementById('cover-placeholder');
+        if (d.coverUrl) {
+          coverImg.src = d.coverUrl;
+          coverImg.style.display = 'block';
+          placeholder.style.display = 'none';
+        } else {
+          coverImg.style.display = 'none';
+          placeholder.style.display = 'flex';
+        }
+        document.getElementById('cover-wrap').classList.toggle('live', !!d.live);
+
+        if (d.live && !isPlaying) {
+          startStream(d.streamKey);
+        } else if (!d.live && isPlaying) {
+          stopStream();
+        } else if (!d.live) {
+          showOffline();
+        }
+      } catch {}
+      scheduleNextPoll();
+    }
+
+    function scheduleNextPoll() {
+      clearTimeout(pollTimer);
+      // Poll every 3s while offline, every 8s while playing (less pressure)
+      pollTimer = setTimeout(pollStatus, isPlaying ? 8000 : 3000);
+    }
+
+    // ── HLS playback ──────────────────────────────────────────
+    function startStream(streamKey) {
+      const url = '/live/live/' + streamKey + '/index.m3u8';
+
+      // Show "buffering" state — don't hide overlay until manifest confirmed
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<div class="spinner"></div>
+        <div id="overlay-title">Connecting to stream...</div>
+        <div id="overlay-sub">DJ is live — loading segments</div>`;
+
+      // Animate buffer bar to show loading progress
+      let bufPct = 10;
+      bufBar.style.width = bufPct + '%';
+      const bufInterval = setInterval(() => {
+        bufPct = Math.min(bufPct + 6, 85);
+        bufBar.style.width = bufPct + '%';
+      }, 800);
+      function finishBufBar() {
+        clearInterval(bufInterval);
+        bufBar.style.width = '100%';
+        setTimeout(() => { bufBar.style.width = '0%'; }, 500);
+      }
+
+      if (Hls.isSupported()) {
+        if (hls) hls.destroy();
+        hls = new Hls({
+          lowLatencyMode: false,
+          enableWorker: true,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 10,
+          liveSyncOnStallEnabled: true,
+          maxBufferHole: 0.5,
+          manifestLoadingMaxRetry: 10,
+          manifestLoadingRetryDelay: 1000,
+          manifestLoadingMaxRetryTimeout: 32000,
+          levelLoadingMaxRetry: 10,
+          levelLoadingRetryDelay: 1000,
+          fragLoadingMaxRetry: 10,
+          fragLoadingRetryDelay: 1000,
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          isPlaying = true;
+          finishBufBar();
+          hideOverlay();
+          liveBadge.style.display = 'block';
+          // Fade in audio from 0 → saved volume
+          video.volume = 0;
+          video.muted  = false;
+          const targetVol = parseFloat(document.getElementById('volume').value);
+          video.play().catch(showPlayPrompt);
+          let v = 0;
+          const fadeIn = setInterval(() => {
+            v = Math.min(v + 0.05, targetVol);
+            video.volume = v;
+            if (v >= targetVol) clearInterval(fadeIn);
+          }, 60);
+        });
+        hls.on(Hls.Events.ERROR, (e, data) => {
+          if (!data.fatal) return;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            finishBufBar();
+            stopStream();
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS (some smart TVs / Safari)
+        video.src = url;
+        video.onloadedmetadata = () => {
+          isPlaying = true;
+          hideOverlay();
+          liveBadge.style.display = 'block';
+        };
+        video.play().catch(showPlayPrompt);
+      } else {
+        showOverlay('Browser not supported', 'Please update your browser');
+        return;
+      }
+      // Mark as "attempting" so poll doesn't restart the whole load
+      isPlaying = true;
+    }
+
+    function stopStream() {
+      if (hls) { hls.destroy(); hls = null; }
+      video.src = '';
+      isPlaying = false;
+      liveBadge.style.display = 'none';
+      showOffline();
+    }
+
+    // ── Overlay helpers ───────────────────────────────────────
+    function showOffline() {
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <div id="overlay-icon">📡</div>
+        <div id="overlay-title">Not Live</div>
+        <div id="overlay-sub">The DJ is offline right now.<br>We'll connect you automatically when they go live.</div>`;
+    }
+    function showPlayPrompt() {
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <div id="overlay-icon" style="font-size:4em;cursor:pointer" onclick="manualPlay()">▶</div>
+        <div id="overlay-title">Tap to Play</div>
+        <div id="overlay-sub">Your browser requires a tap to start audio</div>`;
+    }
+    function showOverlay(title, sub) {
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<div id="overlay-icon">⚠️</div>
+        <div id="overlay-title">${title}</div><div id="overlay-sub">${sub}</div>`;
+    }
+    function hideOverlay() { overlay.style.display = 'none'; }
+    function manualPlay() { video.muted = false; video.play(); hideOverlay(); }
+
+    // ── Controls ──────────────────────────────────────────────
+    function setVolume(v) {
+      video.volume = parseFloat(v);
+      video.muted  = false;
+      localStorage.setItem('djVol', v);
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+      else document.exitFullscreen();
+    }
+
+    function toggleChat() {
+      chatOpen = !chatOpen;
+      document.getElementById('chat-panel').classList.toggle('open', chatOpen);
+      document.getElementById('chat-toggle-btn').classList.toggle('active', chatOpen);
+    }
+
+    async function doLogout() {
+      await fetch('/auth/logout', { method:'POST' });
+      window.location.href = '/';
+    }
+
+    // ── Chat ──────────────────────────────────────────────────
+    function connectChat() {
+      if (!userToken) return;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      wsChat = new WebSocket(`${proto}://${location.host}/ws/chat?token=${encodeURIComponent(userToken)}`);
+
+      wsChat.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'history') msg.messages.forEach(m => appendChat(m));
+          else appendChat(msg);
+        } catch {}
+      };
+      wsChat.onclose = () => { setTimeout(connectChat, 4000); };
+      wsChat.onerror = () => {};
+    }
+
+    function appendChat(msg) {
+      const el = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + (msg.type === 'system' ? 'system' : (msg.isDJ ? 'dj' : 'viewer'));
+      if (msg.type === 'system') {
+        div.textContent = msg.text;
+      } else {
+        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}`;
+      }
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+      while (el.children.length > 200) el.removeChild(el.firstChild);
+      // Badge notification if chat is closed
+      if (!chatOpen) {
+        const btn = document.getElementById('chat-toggle-btn');
+        btn.textContent = '💬 Chat •';
+      }
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chat-input');
+      const text  = input.value.trim();
+      if (!text || !wsChat || wsChat.readyState !== WebSocket.OPEN) return;
+      wsChat.send(JSON.stringify({ type: 'chat', text }));
+      input.value = '';
+    }
+
+    // Clear notification dot when chat is opened
+    document.getElementById('chat-toggle-btn').addEventListener('click', () => {
+      document.getElementById('chat-toggle-btn').textContent = '💬 Chat';
+    });
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    init();
+  </script>
+</body>
+</html>

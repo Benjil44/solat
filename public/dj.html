@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJ Broadcast Studio</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--panel:#121212;--card:#1a1a1a;--border:#2a2a2a;
+  --accent:#ff4400;--green:#44ff88;--yellow:#ffcc00;--red:#ff4444;
+  --text:#fff;--muted:#666;
+}
+body{background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+
+/* ── Header ── */
+header{background:var(--panel);border-bottom:2px solid var(--accent);
+  padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
+.hdr-right{display:flex;align-items:center;gap:14px}
+#live-indicator{display:flex;align-items:center;gap:7px;font-size:.85em}
+.live-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.live-dot.on{background:var(--red);box-shadow:0 0 8px var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+#viewer-count{color:var(--muted);font-size:.85em}
+.hdr-btn{background:transparent;border:1px solid var(--border);color:#aaa;
+  padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.85em}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Main layout ── */
+.studio{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;grid-template-rows:auto auto auto;
+  gap:10px;padding:10px;overflow:auto}
+
+/* ── Deck card ── */
+.deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;
+  display:flex;flex-direction:column;gap:10px}
+.deck.a{border-top:3px solid #4488ff}
+.deck.b{border-top:3px solid var(--accent)}
+.deck-label{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+
+/* ── Track load ── */
+.load-area{background:var(--bg);border:2px dashed var(--border);border-radius:8px;
+  padding:14px;text-align:center;cursor:pointer;transition:.2s;position:relative}
+.load-area:hover,.load-area.drag{border-color:var(--accent);background:#1a0f00}
+.load-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.load-area .icon{font-size:1.6em;margin-bottom:5px}
+.load-area .hint{font-size:.78em;color:var(--muted)}
+.track-name{font-size:.85em;font-weight:bold;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;color:var(--green)}
+
+/* ── Waveform / visualizer ── */
+.waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden}
+canvas.waveform{display:block;width:100%;height:60px}
+
+/* ── Transport controls ── */
+.transport{display:flex;align-items:center;gap:8px}
+.t-btn{background:var(--panel);border:1px solid var(--border);color:#ccc;
+  width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:1.1em;
+  display:flex;align-items:center;justify-content:center;transition:.15s}
+.t-btn:hover{border-color:var(--accent);color:var(--accent)}
+.t-btn.play-btn{width:44px;height:44px;font-size:1.3em;background:var(--accent);
+  border-color:var(--accent);color:#fff}
+.t-btn.play-btn.playing{background:#ff6622}
+.time-display{font-size:.8em;color:var(--muted);margin-left:auto;letter-spacing:1px}
+
+/* ── Speed ── */
+.speed-wrap{display:flex;align-items:center;gap:8px;font-size:.8em}
+.speed-val{min-width:36px;text-align:right;color:var(--yellow)}
+input[type=range]{accent-color:var(--accent);cursor:pointer}
+.speed-wrap input{flex:1}
+
+/* ── EQ / knobs row ── */
+.eq-row{display:flex;gap:8px}
+.eq-col{flex:1;display:flex;flex-direction:column;gap:4px;align-items:center}
+.eq-label{font-size:.65em;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.eq-val{font-size:.72em;color:var(--yellow);min-height:14px;text-align:center}
+input.eq-knob{writing-mode:vertical-lr;direction:rtl;
+  width:28px;height:80px;
+  accent-color:var(--accent);cursor:pointer}
+
+/* ── Volume ── */
+.vol-row{display:flex;align-items:center;gap:8px;font-size:.8em}
+.vol-row span{color:var(--muted);min-width:28px}
+.vol-row input{flex:1;accent-color:var(--green)}
+.vol-val{min-width:36px;text-align:right;color:var(--green)}
+
+/* ── Meter ── */
+.meter-row{display:flex;gap:4px;align-items:flex-end;height:40px}
+.meter-bar{width:6px;border-radius:2px;background:#222;overflow:hidden;position:relative}
+.meter-fill{position:absolute;bottom:0;width:100%;background:var(--green);
+  transition:height 0.05s;border-radius:2px}
+
+/* ── CENTER COLUMN ── */
+.center-col{display:flex;flex-direction:column;gap:10px}
+
+/* Crossfader */
+.crossfader-card{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:14px}
+.cf-label{font-size:.7em;color:var(--muted);letter-spacing:1px;margin-bottom:8px;
+  text-align:center;text-transform:uppercase}
+.cf-track{display:flex;align-items:center;gap:6px;font-size:.75em}
+.cf-track span{color:var(--muted);min-width:14px}
+.cf-track input{flex:1;accent-color:var(--accent)}
+.cf-auto-status{text-align:center;font-size:.72em;font-weight:bold;letter-spacing:1px;
+  min-height:16px;margin-top:5px;transition:opacity .3s}
+.cf-auto-status.visible{color:var(--yellow);animation:cfpulse .8s ease-in-out infinite}
+@keyframes cfpulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Master vol */
+.master-vol-row{display:flex;align-items:center;gap:8px;font-size:.8em;margin-top:6px}
+.master-vol-row span{color:var(--muted);font-size:.75em}
+.master-vol-row input{flex:1;accent-color:var(--yellow)}
+
+/* Camera / broadcast */
+.broadcast-card{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+#cam-preview{width:100%;border-radius:8px;background:#000;
+  aspect-ratio:16/9;object-fit:cover;display:none}
+#viz-canvas{width:100%;border-radius:8px;background:#000;
+  aspect-ratio:16/9;display:block}
+.cam-btns{display:flex;gap:8px;flex-wrap:wrap}
+.cam-btn{flex:1;padding:8px 6px;background:var(--panel);border:1px solid var(--border);
+  color:#ccc;border-radius:7px;cursor:pointer;font-size:.8em;text-align:center;transition:.15s}
+.cam-btn:hover{border-color:var(--accent)}
+.cam-btn.active{background:#1a0800;border-color:var(--accent);color:var(--accent)}
+.go-live-btn{width:100%;padding:14px;border:none;border-radius:8px;
+  font-size:1.05em;font-weight:bold;cursor:pointer;letter-spacing:1px;transition:.15s}
+.go-live-btn.off{background:var(--accent);color:#fff}
+.go-live-btn.off:hover{background:#e03d00}
+.go-live-btn.on{background:#220000;border:2px solid var(--red);color:var(--red);
+  animation:pulse-border 1.5s infinite}
+@keyframes pulse-border{0%,100%{box-shadow:0 0 0 0 rgba(255,68,68,.4)}50%{box-shadow:0 0 0 8px rgba(255,68,68,0)}}
+
+/* Stream title */
+.title-input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:7px;color:#fff;font-size:.85em;outline:none}
+.title-input:focus{border-color:var(--accent)}
+.title-btn{padding:7px 14px;background:var(--panel);border:1px solid var(--border);
+  color:#ccc;border-radius:7px;cursor:pointer;font-size:.8em;white-space:nowrap}
+.title-btn:hover{border-color:var(--accent);color:var(--accent)}
+.title-row{display:flex;gap:7px}
+
+/* ── CHAT PANEL ── */
+.chat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:0;display:flex;flex-direction:column;height:320px;grid-column:span 3}
+.chat-header{padding:10px 14px;border-bottom:1px solid var(--border);
+  font-size:.75em;font-weight:bold;color:var(--muted);letter-spacing:1px}
+.chat-messages{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:5px}
+.chat-msg{font-size:.82em;line-height:1.4;word-break:break-word}
+.chat-msg .who{font-weight:bold;margin-right:6px}
+.chat-msg.dj .who{color:var(--accent)}
+.chat-msg.viewer .who{color:#88aaff}
+.chat-msg.system{color:var(--muted);font-style:italic}
+.chat-input-row{display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border)}
+.chat-input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:7px;color:#fff;font-size:.85em;outline:none}
+.chat-input:focus{border-color:var(--accent)}
+.chat-send-btn{padding:8px 14px;background:var(--accent);border:none;
+  color:#fff;border-radius:7px;cursor:pointer;font-size:.85em;font-weight:bold}
+.chat-send-btn:hover{background:#e03d00}
+
+/* ── Effects ── */
+.fx-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.fx-btn{padding:4px 10px;background:var(--panel);border:1px solid var(--border);
+  color:var(--muted);border-radius:5px;cursor:pointer;font-size:.75em}
+.fx-btn.active{background:#1a0800;border-color:var(--yellow);color:var(--yellow)}
+
+/* Toast */
+#toast{position:fixed;bottom:20px;right:20px;background:#222;border:1px solid var(--accent);
+  color:#fff;padding:10px 18px;border-radius:8px;font-size:.85em;display:none;z-index:999}
+
+/* ── Playlist Panel ── */
+.playlist-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin:0 10px 10px;display:flex;flex-direction:column;gap:10px}
+.pl-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pl-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
+  text-transform:uppercase;white-space:nowrap}
+.pl-add-btn{padding:5px 13px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;color:#ccc;cursor:pointer;font-size:.8em;white-space:nowrap}
+.pl-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.autodj-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.xfade-lbl{font-size:.75em;color:var(--muted);white-space:nowrap}
+#xfadeTimeVal{font-size:.75em;color:var(--yellow);min-width:26px}
+.autodj-btn{padding:7px 16px;border:1px solid var(--border);border-radius:7px;
+  font-size:.82em;font-weight:bold;cursor:pointer;letter-spacing:1px;white-space:nowrap;
+  background:var(--panel);color:#ccc;transition:.15s}
+.autodj-btn:hover{border-color:var(--accent);color:var(--accent)}
+.autodj-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);
+  animation:pulse-border 1.5s infinite}
+#playlist-tracks{display:flex;flex-direction:column;gap:3px;max-height:210px;overflow-y:auto}
+.pl-empty{color:var(--muted);font-size:.82em;text-align:center;padding:18px 0}
+.pl-item{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:#0d0d0d;border-radius:6px;border:1px solid transparent;
+  font-size:.82em;user-select:none}
+.pl-item:hover{border-color:#333}
+.pl-item.active{border-color:var(--accent);background:#1a0800}
+.pl-item.next-up{border-color:#3a3a00;background:#111800}
+.pl-num{color:var(--muted);min-width:22px;text-align:right;font-size:.75em;flex-shrink:0}
+.pl-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
+.pl-dur{color:var(--muted);min-width:40px;text-align:right;font-size:.78em;flex-shrink:0}
+.pl-deck-btn{padding:2px 8px;border:1px solid #333;border-radius:4px;
+  background:transparent;color:#777;cursor:pointer;font-size:.72em;flex-shrink:0}
+.pl-deck-btn:hover{border-color:#888;color:#ccc}
+.pl-del{padding:2px 7px;border:none;background:transparent;
+  color:#555;cursor:pointer;font-size:.84em;flex-shrink:0}
+.pl-del:hover{color:#ff4444}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <h1>DJ STUDIO</h1>
+  <div class="hdr-right">
+    <div id="live-indicator">
+      <div class="live-dot" id="live-dot"></div>
+      <span id="live-text">OFF AIR</span>
+    </div>
+    <span id="viewer-count">0 viewers</span>
+    <button class="hdr-btn" onclick="window.location.href='/admin.html'">Admin</button>
+  </div>
+</header>
+
+<div class="studio">
+
+  <!-- ═══ DECK A ═══ -->
+  <div class="deck a" id="deckA">
+    <div class="deck-label">Deck A</div>
+
+    <!-- Load track -->
+    <div class="load-area" id="loadA" ondragover="dragOver(event,'A')" ondrop="dropFile(event,'A')" ondragleave="dragLeave('A')">
+      <input type="file" accept="audio/*" onchange="loadFile(event,'A')">
+      <div class="icon">🎵</div>
+      <div class="hint">Click or drag a music file here</div>
+    </div>
+    <div class="track-name" id="trackNameA">No track loaded</div>
+
+    <!-- Waveform -->
+    <div class="waveform-wrap">
+      <canvas class="waveform" id="waveformA" height="60"></canvas>
+    </div>
+
+    <!-- Transport -->
+    <div class="transport">
+      <button class="t-btn" onclick="seekDeck('A',-10)" title="−10s">⏮</button>
+      <button class="t-btn play-btn" id="playBtnA" onclick="togglePlay('A')">▶</button>
+      <button class="t-btn" onclick="seekDeck('A',10)" title="+10s">⏭</button>
+      <span class="time-display" id="timeA">0:00 / 0:00</span>
+    </div>
+
+    <!-- Speed / Pitch -->
+    <div class="speed-wrap">
+      <span style="color:var(--muted);font-size:.75em">SPEED</span>
+      <input type="range" id="speedA" min="0.5" max="2" step="0.01" value="1"
+        oninput="setSpeed('A',this.value)">
+      <span class="speed-val" id="speedValA">100%</span>
+    </div>
+
+    <!-- EQ -->
+    <div class="eq-row">
+      <div class="eq-col">
+        <span class="eq-label">Bass</span>
+        <input class="eq-knob" type="range" id="bassA" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('A','bass',this.value)">
+        <span class="eq-val" id="bassValA">0</span>
+      </div>
+      <div class="eq-col">
+        <span class="eq-label">Mid</span>
+        <input class="eq-knob" type="range" id="midA" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('A','mid',this.value)">
+        <span class="eq-val" id="midValA">0</span>
+      </div>
+      <div class="eq-col">
+        <span class="eq-label">High</span>
+        <input class="eq-knob" type="range" id="highA" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('A','high',this.value)">
+        <span class="eq-val" id="highValA">0</span>
+      </div>
+      <!-- Level meter -->
+      <div class="meter-row" id="meterA">
+        <div class="meter-bar"><div class="meter-fill" id="meterFillAL"></div></div>
+        <div class="meter-bar"><div class="meter-fill" id="meterFillAR"></div></div>
+      </div>
+    </div>
+
+    <!-- Volume -->
+    <div class="vol-row">
+      <span>VOL</span>
+      <input type="range" id="volA" min="0" max="1.5" step="0.01" value="1"
+        oninput="setVol('A',this.value)">
+      <span class="vol-val" id="volValA">100%</span>
+    </div>
+
+    <!-- FX -->
+    <div class="fx-row">
+      <button class="fx-btn" id="fxEchoA" onclick="toggleFX('A','echo')">Echo</button>
+      <button class="fx-btn" id="fxLowpassA" onclick="toggleFX('A','lowpass')">Low Pass</button>
+      <button class="fx-btn" id="fxReverbA" onclick="toggleFX('A','reverb')">Reverb</button>
+    </div>
+  </div>
+
+  <!-- ═══ CENTER COLUMN ═══ -->
+  <div class="center-col">
+
+    <!-- Crossfader -->
+    <div class="crossfader-card">
+      <div class="cf-label">Crossfader</div>
+      <div class="cf-track">
+        <span style="color:#4488ff;font-weight:bold">A</span>
+        <input type="range" id="crossfader" min="0" max="1" step="0.01" value="0.5"
+          oninput="setCrossfader(this.value)">
+        <span style="color:var(--accent);font-weight:bold">B</span>
+      </div>
+      <div class="cf-auto-status" id="cfAutoStatus"></div>
+      <div class="master-vol-row">
+        <span>MASTER</span>
+        <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.9"
+          oninput="setMasterVol(this.value)">
+        <span id="masterVolVal" style="color:var(--yellow);min-width:36px;text-align:right">90%</span>
+      </div>
+    </div>
+
+    <!-- Broadcast / Camera -->
+    <div class="broadcast-card">
+      <video id="cam-preview" autoplay muted playsinline></video>
+      <canvas id="viz-canvas" width="320" height="180"></canvas>
+
+      <div class="cam-btns">
+        <div class="cam-btn" id="camBtn" onclick="toggleCamera()">📷 Camera</div>
+        <div class="cam-btn" id="screenBtn" onclick="toggleScreen()">🖥 Screen</div>
+        <div class="cam-btn" id="micBtn" onclick="toggleMic()">🎙 Mic</div>
+        <div class="cam-btn" id="monitorMuteBtn" onclick="toggleMonitorMute()" title="Mute your local speakers only — stream keeps playing">🔊 Monitor</div>
+      </div>
+
+      <!-- Stream title + cover art -->
+      <div class="title-row">
+        <input class="title-input" type="text" id="streamTitle"
+          placeholder="Track title..." maxlength="120" value="DJ Live Session">
+        <button class="title-btn" onclick="updateTitle()">Set</button>
+      </div>
+      <div class="title-row">
+        <input class="title-input" type="url" id="coverUrl"
+          placeholder="Cover image URL (optional)..." maxlength="500">
+      </div>
+
+      <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
+        ● GO LIVE
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ═══ DECK B ═══ -->
+  <div class="deck b" id="deckB">
+    <div class="deck-label">Deck B</div>
+
+    <div class="load-area" id="loadB" ondragover="dragOver(event,'B')" ondrop="dropFile(event,'B')" ondragleave="dragLeave('B')">
+      <input type="file" accept="audio/*" onchange="loadFile(event,'B')">
+      <div class="icon">🎵</div>
+      <div class="hint">Click or drag a music file here</div>
+    </div>
+    <div class="track-name" id="trackNameB">No track loaded</div>
+
+    <div class="waveform-wrap">
+      <canvas class="waveform" id="waveformB" height="60"></canvas>
+    </div>
+
+    <div class="transport">
+      <button class="t-btn" onclick="seekDeck('B',-10)" title="−10s">⏮</button>
+      <button class="t-btn play-btn" id="playBtnB" onclick="togglePlay('B')">▶</button>
+      <button class="t-btn" onclick="seekDeck('B',10)" title="+10s">⏭</button>
+      <span class="time-display" id="timeB">0:00 / 0:00</span>
+    </div>
+
+    <div class="speed-wrap">
+      <span style="color:var(--muted);font-size:.75em">SPEED</span>
+      <input type="range" id="speedB" min="0.5" max="2" step="0.01" value="1"
+        oninput="setSpeed('B',this.value)">
+      <span class="speed-val" id="speedValB">100%</span>
+    </div>
+
+    <div class="eq-row">
+      <div class="eq-col">
+        <span class="eq-label">Bass</span>
+        <input class="eq-knob" type="range" id="bassB" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('B','bass',this.value)">
+        <span class="eq-val" id="bassValB">0</span>
+      </div>
+      <div class="eq-col">
+        <span class="eq-label">Mid</span>
+        <input class="eq-knob" type="range" id="midB" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('B','mid',this.value)">
+        <span class="eq-val" id="midValB">0</span>
+      </div>
+      <div class="eq-col">
+        <span class="eq-label">High</span>
+        <input class="eq-knob" type="range" id="highB" min="-20" max="20" step="1" value="0"
+          oninput="setEQ('B','high',this.value)">
+        <span class="eq-val" id="highValB">0</span>
+      </div>
+      <div class="meter-row" id="meterB">
+        <div class="meter-bar"><div class="meter-fill" id="meterFillBL"></div></div>
+        <div class="meter-bar"><div class="meter-fill" id="meterFillBR"></div></div>
+      </div>
+    </div>
+
+    <div class="vol-row">
+      <span>VOL</span>
+      <input type="range" id="volB" min="0" max="1.5" step="0.01" value="1"
+        oninput="setVol('B',this.value)">
+      <span class="vol-val" id="volValB">100%</span>
+    </div>
+
+    <div class="fx-row">
+      <button class="fx-btn" id="fxEchoB" onclick="toggleFX('B','echo')">Echo</button>
+      <button class="fx-btn" id="fxLowpassB" onclick="toggleFX('B','lowpass')">Low Pass</button>
+      <button class="fx-btn" id="fxReverbB" onclick="toggleFX('B','reverb')">Reverb</button>
+    </div>
+  </div>
+
+  <!-- ═══ CHAT PANEL ═══ -->
+  <div class="chat-card">
+    <div class="chat-header">LIVE CHAT — <span id="chat-count">0</span> connected</div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" type="text" placeholder="Message viewers..."
+        maxlength="200" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send-btn" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+</div><!-- /studio -->
+
+<!-- ═══ PLAYLIST + AUTO DJ ═══ -->
+<div class="playlist-panel">
+  <div class="pl-header">
+    <span class="pl-lbl">PLAYLIST</span>
+    <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
+    <input type="file" id="plFileInput" accept="audio/*" multiple style="display:none"
+      onchange="addToPlaylist(this.files);this.value=''">
+    <div class="autodj-row">
+      <span class="xfade-lbl">Crossfade:</span>
+      <input type="range" id="xfadeTime" min="2" max="30" value="8"
+        style="width:70px;accent-color:var(--yellow)"
+        oninput="autoDJCrossfadeTime=+this.value;document.getElementById('xfadeTimeVal').textContent=this.value+'s'">
+      <span id="xfadeTimeVal">8s</span>
+      <button class="autodj-btn" id="autoDJBtn" onclick="toggleAutoDJ()">▶▶ AUTO DJ</button>
+    </div>
+  </div>
+  <div id="playlist-tracks">
+    <div class="pl-empty">No tracks — click "+ Add Tracks" to load music files</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  WEB AUDIO ENGINE
+// ═══════════════════════════════════════════════════════════════
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// Master output → visualizer → monitorGain (local speakers only) → destination
+const masterGain     = audioCtx.createGain();
+const masterAnalyser = audioCtx.createAnalyser();
+const monitorGain    = audioCtx.createGain(); // mute local monitor without muting stream
+masterAnalyser.fftSize = 256;
+masterGain.connect(masterAnalyser);
+masterAnalyser.connect(monitorGain);
+monitorGain.connect(audioCtx.destination);
+
+// MediaStream destination (for broadcasting mixed audio — unaffected by monitorGain)
+const broadcastDest = audioCtx.createMediaStreamDestination();
+masterGain.connect(broadcastDest);
+
+masterGain.gain.value = 0.9;
+
+// ── Deck state ────────────────────────────────────────────────
+const decks = { A: makeDeck(), B: makeDeck() };
+
+// ── Auto DJ state (declared here to avoid TDZ in RAF loop) ────
+let autoDJActive        = false;
+let autoDJCurrentIdx    = -1;
+let autoDJActiveDeck    = 'A';
+let autoDJTransitioning = false;
+let autoDJCrossfadeTime = 8;
+
+function makeDeck() {
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 1;
+
+  // EQ chain: bass → mid → high
+  const bass = audioCtx.createBiquadFilter();
+  bass.type = 'lowshelf'; bass.frequency.value = 200;
+  const mid  = audioCtx.createBiquadFilter();
+  mid.type  = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 1;
+  const high = audioCtx.createBiquadFilter();
+  high.type = 'highshelf'; high.frequency.value = 3000;
+
+  // FX nodes
+  const delay = audioCtx.createDelay(2);
+  delay.delayTime.value = 0.3;
+  const delayFeedback = audioCtx.createGain();
+  delayFeedback.gain.value = 0;   // off by default
+  const delayWetGain = audioCtx.createGain();
+  delayWetGain.gain.value = 0;    // off by default — prevents echo when FX is off
+  const lowpass = audioCtx.createBiquadFilter();
+  lowpass.type = 'lowpass'; lowpass.frequency.value = 20000; // max = off
+  const reverbConv = audioCtx.createConvolver();
+  const reverbGain = audioCtx.createGain();
+  reverbGain.gain.value = 0; // off by default
+
+  // Signal path: gain → bass → mid → high → lowpass
+  gainNode.connect(bass);
+  bass.connect(mid);
+  mid.connect(high);
+  high.connect(lowpass);
+
+  // Echo: tap from gain → delay → feedback → lowpass (mixed in)
+  gainNode.connect(delay);
+  delay.connect(delayFeedback);
+  delayFeedback.connect(delay);
+  delay.connect(delayWetGain);
+  delayWetGain.connect(lowpass); // wet gain = 0 by default → no echo until FX enabled
+
+  // Reverb: tap from gain → reverb → reverbGain → lowpass
+  gainNode.connect(reverbConv);
+  reverbConv.connect(reverbGain);
+  reverbGain.connect(lowpass);
+
+  // Analyser per deck
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  lowpass.connect(analyser);
+  // Final output node from this deck (connect to master via crossfader gains)
+  const outGain = audioCtx.createGain();
+  analyser.connect(outGain);
+  outGain.connect(masterGain);
+
+  return {
+    gainNode, bass, mid, high, lowpass,
+    delay, delayFeedback, delayWetGain, reverbConv, reverbGain,
+    analyser, outGain,
+    source: null, buffer: null,
+    startTime: 0, pauseOffset: 0,
+    playing: false, duration: 0,
+    fx: { echo: false, lowpass: false, reverb: false }
+  };
+}
+
+// Crossfader: A←→B
+function setCrossfader(v) {
+  const cf = parseFloat(v);       // 0=all A, 1=all B
+  decks.A.outGain.gain.value = 1 - cf;
+  decks.B.outGain.gain.value = cf;
+}
+
+function setMasterVol(v) {
+  masterGain.gain.value = parseFloat(v);
+  document.getElementById('masterVolVal').textContent = Math.round(v * 100) + '%';
+}
+
+// ── Load file ──────────────────────────────────────────────────
+function loadFile(e, id) {
+  const file = e.target.files[0];
+  if (!file) return;
+  decodeFile(file, id);
+}
+function dropFile(e, id) {
+  e.preventDefault();
+  dragLeave(id);
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('audio')) { toast('Not an audio file'); return; }
+  decodeFile(file, id);
+}
+function dragOver(e, id) {
+  e.preventDefault();
+  document.getElementById('load' + id).classList.add('drag');
+}
+function dragLeave(id) {
+  document.getElementById('load' + id).classList.remove('drag');
+}
+
+function decodeFile(file, id) {
+  toast('Loading ' + file.name.slice(0, 30) + '...');
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      const buffer = await audioCtx.decodeAudioData(e.target.result.slice(0));
+      const deck = decks[id];
+      if (deck.playing) stopDeck(id);
+      deck.buffer = buffer;
+      deck.duration = buffer.duration;
+      deck.pauseOffset = 0;
+      document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
+      drawWaveform(buffer, id);
+      toast('Loaded: ' + file.name.slice(0, 40));
+    } catch (err) {
+      toast('Could not decode audio file', true);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Transport ──────────────────────────────────────────────────
+function togglePlay(id) {
+  const deck = decks[id];
+  if (!deck.buffer) { toast('Load a track first'); return; }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (deck.playing) {
+    pauseDeck(id);
+  } else {
+    playDeck(id, deck.pauseOffset);
+  }
+}
+
+function playDeck(id, offset) {
+  const deck = decks[id];
+  if (deck.source) { try { deck.source.stop(); } catch {} }
+  deck.source = audioCtx.createBufferSource();
+  deck.source.buffer = deck.buffer;
+  deck.source.loop = false;
+  deck.source.playbackRate.value = parseFloat(document.getElementById('speed' + id).value);
+  deck.source.connect(deck.gainNode);
+  deck.source.start(0, offset);
+  deck.startTime = audioCtx.currentTime - offset;
+  deck.playing = true;
+  deck.source.onended = () => {
+    if (deck.playing) { deck.playing = false; deck.pauseOffset = 0; updatePlayBtn(id); }
+  };
+  updatePlayBtn(id);
+}
+
+function pauseDeck(id) {
+  const deck = decks[id];
+  deck.pauseOffset = audioCtx.currentTime - deck.startTime;
+  try { deck.source.stop(); } catch {}
+  deck.playing = false;
+  updatePlayBtn(id);
+}
+
+function stopDeck(id) {
+  pauseDeck(id);
+  decks[id].pauseOffset = 0;
+}
+
+function seekDeck(id, secs) {
+  const deck = decks[id];
+  if (!deck.buffer) return;
+  const newOffset = Math.max(0, Math.min(deck.duration, deck.pauseOffset + secs));
+  deck.pauseOffset = newOffset;
+  if (deck.playing) playDeck(id, newOffset);
+}
+
+function updatePlayBtn(id) {
+  const btn = document.getElementById('playBtn' + id);
+  const d = decks[id];
+  btn.textContent = d.playing ? '⏸' : '▶';
+  btn.classList.toggle('playing', d.playing);
+}
+
+// ── EQ ────────────────────────────────────────────────────────
+function setEQ(id, band, val) {
+  val = parseFloat(val);
+  const deck = decks[id];
+  if (band === 'bass') { deck.bass.gain.value = val; document.getElementById('bassVal' + id).textContent = val; }
+  if (band === 'mid')  { deck.mid.gain.value  = val; document.getElementById('midVal'  + id).textContent = val; }
+  if (band === 'high') { deck.high.gain.value = val; document.getElementById('highVal' + id).textContent = val; }
+}
+
+function setSpeed(id, val) {
+  val = parseFloat(val);
+  const deck = decks[id];
+  if (deck.source) deck.source.playbackRate.value = val;
+  document.getElementById('speedVal' + id).textContent = Math.round(val * 100) + '%';
+}
+
+function setVol(id, val) {
+  decks[id].gainNode.gain.value = parseFloat(val);
+  document.getElementById('volVal' + id).textContent = Math.round(val * 100) + '%';
+}
+
+// ── FX ────────────────────────────────────────────────────────
+function toggleFX(id, fx) {
+  const deck = decks[id];
+  const on = !deck.fx[fx];
+  deck.fx[fx] = on;
+  document.getElementById('fx' + capitalize(fx) + id).classList.toggle('active', on);
+
+  if (fx === 'echo')    { deck.delayWetGain.gain.value = on ? 0.8 : 0; deck.delayFeedback.gain.value = on ? 0.45 : 0; }
+  if (fx === 'lowpass') { deck.lowpass.frequency.value  = on ? 800 : 20000; }
+  if (fx === 'reverb')  {
+    if (on && !deck._reverbLoaded) loadReverb(deck);
+    deck.reverbGain.gain.value = on ? 0.35 : 0;
+  }
+}
+
+// Simple synthetic reverb impulse
+function loadReverb(deck) {
+  const len = audioCtx.sampleRate * 2;
+  const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const ch = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  }
+  deck.reverbConv.buffer = buf;
+  deck._reverbLoaded = true;
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// ═══════════════════════════════════════════════════════════════
+//  VISUALIZATION
+// ═══════════════════════════════════════════════════════════════
+function drawWaveform(buffer, id) {
+  const canvas = document.getElementById('waveform' + id);
+  const ctx2   = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  const w = canvas.width, h = canvas.height;
+  const data = buffer.getChannelData(0);
+  const step = Math.ceil(data.length / w);
+  ctx2.fillStyle = '#0d0d0d';
+  ctx2.fillRect(0, 0, w, h);
+  ctx2.strokeStyle = id === 'A' ? '#4488ff' : '#ff4400';
+  ctx2.lineWidth = 1;
+  ctx2.beginPath();
+  for (let i = 0; i < w; i++) {
+    let min = 1, max = -1;
+    for (let j = 0; j < step; j++) {
+      const s = data[i * step + j] || 0;
+      if (s < min) min = s;
+      if (s > max) max = s;
+    }
+    ctx2.moveTo(i, (1 + min) * h / 2);
+    ctx2.lineTo(i, (1 + max) * h / 2);
+  }
+  ctx2.stroke();
+}
+
+// Time display
+function updateTimers() {
+  for (const id of ['A', 'B']) {
+    const d = decks[id];
+    const elapsed = d.playing ? (audioCtx.currentTime - d.startTime) : d.pauseOffset;
+    document.getElementById('time' + id).textContent = fmt(elapsed) + ' / ' + fmt(d.duration);
+  }
+  autoDJTick();
+}
+function fmt(s) {
+  s = Math.max(0, Math.min(s || 0, 99 * 60 + 59));
+  return String(Math.floor(s / 60)).padStart(1,'0') + ':' + String(Math.floor(s % 60)).padStart(2,'0');
+}
+
+// Visualizer canvas (master output)
+const vizCanvas = document.getElementById('viz-canvas');
+const vizCtx = vizCanvas.getContext('2d');
+const vizData = new Uint8Array(masterAnalyser.frequencyBinCount);
+
+function drawViz() {
+  requestAnimationFrame(drawViz);
+  masterAnalyser.getByteFrequencyData(vizData);
+  const w = vizCanvas.width, h = vizCanvas.height;
+  vizCtx.fillStyle = 'rgba(0,0,0,0.25)';
+  vizCtx.fillRect(0, 0, w, h);
+  const bars = vizData.length;
+  const bw = w / bars;
+  for (let i = 0; i < bars; i++) {
+    const v = vizData[i] / 255;
+    const bh = v * h;
+    const hue = 240 - v * 240; // blue → red
+    vizCtx.fillStyle = `hsl(${hue},100%,55%)`;
+    vizCtx.fillRect(i * bw, h - bh, bw - 1, bh);
+  }
+
+  // Level meters per deck
+  updateMeter('A');
+  updateMeter('B');
+  updateTimers();
+}
+
+const meterDataA = new Uint8Array(decks.A.analyser.frequencyBinCount);
+const meterDataB = new Uint8Array(decks.B.analyser.frequencyBinCount);
+
+function updateMeter(id) {
+  const analyser = decks[id].analyser;
+  const data = id === 'A' ? meterDataA : meterDataB;
+  analyser.getByteFrequencyData(data);
+  let sumL = 0, sumR = 0;
+  for (let i = 0; i < data.length / 2; i++) sumL += data[i];
+  for (let i = data.length / 2; i < data.length; i++) sumR += data[i];
+  const lvlL = Math.min(100, (sumL / (data.length / 2) / 255) * 300);
+  const lvlR = Math.min(100, (sumR / (data.length / 2) / 255) * 300);
+  document.getElementById('meterFill' + id + 'L').style.height = lvlL + '%';
+  document.getElementById('meterFill' + id + 'R').style.height = lvlR + '%';
+}
+
+drawViz();
+
+// ═══════════════════════════════════════════════════════════════
+//  CAMERA / SCREEN
+// ═══════════════════════════════════════════════════════════════
+let cameraStream = null;
+let screenStream = null;
+let micStream    = null;
+let broadcastVideoTrack = null;
+
+async function toggleCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+    document.getElementById('cam-preview').style.display = 'none';
+    document.getElementById('viz-canvas').style.display = 'block';
+    document.getElementById('camBtn').classList.remove('active');
+    broadcastVideoTrack = null;
+    toast('Camera off');
+  } else {
+    try {
+      if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width:1280, height:720 }, audio: false });
+      const preview = document.getElementById('cam-preview');
+      preview.srcObject = cameraStream;
+      preview.style.display = 'block';
+      document.getElementById('viz-canvas').style.display = 'none';
+      document.getElementById('camBtn').classList.add('active');
+      document.getElementById('screenBtn').classList.remove('active');
+      broadcastVideoTrack = cameraStream.getVideoTracks()[0];
+      toast('Camera on');
+    } catch (e) { toast('Camera not available: ' + e.message, true); }
+  }
+}
+
+async function toggleScreen() {
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    document.getElementById('cam-preview').style.display = 'none';
+    document.getElementById('viz-canvas').style.display = 'block';
+    document.getElementById('screenBtn').classList.remove('active');
+    broadcastVideoTrack = null;
+    toast('Screen share off');
+  } else {
+    try {
+      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const preview = document.getElementById('cam-preview');
+      preview.srcObject = screenStream;
+      preview.style.display = 'block';
+      document.getElementById('viz-canvas').style.display = 'none';
+      document.getElementById('screenBtn').classList.add('active');
+      document.getElementById('camBtn').classList.remove('active');
+      broadcastVideoTrack = screenStream.getVideoTracks()[0];
+      screenStream.getVideoTracks()[0].onended = () => {
+        screenStream = null; broadcastVideoTrack = null;
+        document.getElementById('cam-preview').style.display = 'none';
+        document.getElementById('viz-canvas').style.display = 'block';
+        document.getElementById('screenBtn').classList.remove('active');
+      };
+      toast('Screen sharing on');
+    } catch (e) { toast('Screen share failed: ' + e.message, true); }
+  }
+}
+
+async function toggleMic() {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+    document.getElementById('micBtn').classList.remove('active');
+    toast('Mic off');
+  } else {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      // Route mic audio through Web Audio to the mix
+      const micSource = audioCtx.createMediaStreamSource(micStream);
+      const micGain   = audioCtx.createGain();
+      micGain.gain.value = 0.7;
+      micSource.connect(micGain);
+      micGain.connect(masterGain);
+      document.getElementById('micBtn').classList.add('active');
+      toast('Mic on');
+    } catch (e) { toast('Mic not available: ' + e.message, true); }
+  }
+}
+
+let monitorMuted = false;
+function toggleMonitorMute() {
+  monitorMuted = !monitorMuted;
+  monitorGain.gain.value = monitorMuted ? 0 : 1;
+  const btn = document.getElementById('monitorMuteBtn');
+  btn.textContent = monitorMuted ? '🔇 Monitor' : '🔊 Monitor';
+  btn.classList.toggle('active', monitorMuted);
+  toast(monitorMuted ? 'Monitor muted (stream still live)' : 'Monitor unmuted');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BROADCAST — WebSocket → FFmpeg pipeline
+// ═══════════════════════════════════════════════════════════════
+let wsStream        = null;
+let recorder        = null;
+let isLive          = false;
+let broadcastStream = null;   // kept alive across reconnects
+let reconnectCount  = 0;
+const MAX_RECONNECT = 8;
+const ADMIN_KEY = new URLSearchParams(window.location.search).get('key') || '';
+
+function toggleLive() {
+  if (isLive) stopLive(); else startLive();
+}
+
+function startLive() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  // Build combined stream (reuse existing on reconnect so audio is uninterrupted)
+  if (!broadcastStream) {
+    const audioStream = broadcastDest.stream;
+    const videoTrack  = broadcastVideoTrack
+      || document.getElementById('viz-canvas').captureStream(25).getVideoTracks()[0];
+    broadcastStream = new MediaStream([...audioStream.getAudioTracks(), videoTrack]);
+  }
+
+  reconnectCount = 0;
+  connectStreamWS();
+}
+
+function connectStreamWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url   = `${proto}://${location.host}/ws/stream?key=${encodeURIComponent(ADMIN_KEY)}&mode=video`;
+  wsStream = new WebSocket(url);
+  wsStream.binaryType = 'arraybuffer';
+
+  wsStream.onopen = () => {
+    const mimeTypes = [
+      'video/webm;codecs=h264,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9,opus',
+      'video/webm',
+      'audio/webm;codecs=opus',
+      'audio/webm'
+    ];
+    const mimeType = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    recorder = new MediaRecorder(broadcastStream, { mimeType, videoBitsPerSecond: 2500000, audioBitsPerSecond: 192000 });
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0 && wsStream && wsStream.readyState === WebSocket.OPEN)
+        wsStream.send(e.data);
+    };
+    recorder.start(1000);
+
+    reconnectCount = 0;
+    isLive = true;
+    document.getElementById('goLiveBtn').textContent = '■ STOP BROADCAST';
+    document.getElementById('goLiveBtn').className = 'go-live-btn on';
+    document.getElementById('live-dot').classList.add('on');
+    document.getElementById('live-text').textContent = 'ON AIR';
+    toast(reconnectCount === 0 ? 'You are LIVE!' : 'Reconnected!');
+  };
+
+  wsStream.onerror = () => {};  // handled by onclose
+
+  wsStream.onclose = (e) => {
+    if (!isLive) return;  // intentional stop, ignore
+    if (recorder && recorder.state !== 'inactive') { recorder.stop(); recorder = null; }
+    wsStream = null;
+    if (reconnectCount < MAX_RECONNECT) {
+      reconnectCount++;
+      const delay = Math.min(1000 * reconnectCount, 8000);
+      toast(`Connection lost — reconnecting (${reconnectCount}/${MAX_RECONNECT})…`, true);
+      document.getElementById('live-text').textContent = 'RECONNECTING';
+      setTimeout(connectStreamWS, delay);
+    } else {
+      toast('Could not reconnect — broadcast stopped', true);
+      isLive = false;
+      broadcastStream = null;
+      document.getElementById('goLiveBtn').textContent = '● GO LIVE';
+      document.getElementById('goLiveBtn').className = 'go-live-btn off';
+      document.getElementById('live-dot').classList.remove('on');
+      document.getElementById('live-text').textContent = 'OFF AIR';
+    }
+  };
+
+  wsStream.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'error') { toast(msg.msg, true); stopLive(); }
+    } catch {}
+  };
+}
+
+function stopLive() {
+  isLive = false;
+  broadcastStream = null;
+  reconnectCount = MAX_RECONNECT; // prevent reconnect loop
+  if (recorder && recorder.state !== 'inactive') { recorder.stop(); recorder = null; }
+  if (wsStream) { wsStream.close(); wsStream = null; }
+  document.getElementById('goLiveBtn').textContent = '● GO LIVE';
+  document.getElementById('goLiveBtn').className = 'go-live-btn off';
+  document.getElementById('live-dot').classList.remove('on');
+  document.getElementById('live-text').textContent = 'OFF AIR';
+  toast('Broadcast stopped');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CHAT (WebSocket)
+// ═══════════════════════════════════════════════════════════════
+let wsChat = null;
+
+function connectChat() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url   = `${proto}://${location.host}/ws/chat?djKey=${encodeURIComponent(ADMIN_KEY)}`;
+  wsChat = new WebSocket(url);
+
+  wsChat.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'history') {
+        msg.messages.forEach(m => appendChat(m));
+      } else {
+        appendChat(msg);
+      }
+    } catch {}
+  };
+
+  wsChat.onclose = () => { setTimeout(connectChat, 3000); };
+  wsChat.onerror = () => {};
+}
+
+function appendChat(msg) {
+  const el = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + (msg.type === 'system' ? 'system' : (msg.isDJ ? 'dj' : 'viewer'));
+  if (msg.type === 'system') {
+    div.textContent = msg.text;
+  } else {
+    div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}`;
+  }
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  // Keep max 200 messages in DOM
+  while (el.children.length > 200) el.removeChild(el.firstChild);
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text || !wsChat || wsChat.readyState !== WebSocket.OPEN) return;
+  wsChat.send(JSON.stringify({ type: 'chat', text }));
+  input.value = '';
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STREAM TITLE + STATUS POLLING
+// ═══════════════════════════════════════════════════════════════
+async function updateTitle() {
+  const title = document.getElementById('streamTitle').value.trim();
+  const cover = document.getElementById('coverUrl').value.trim();
+  if (!title) return;
+  const res = await fetch('/api/admin/title', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ title, cover })
+  });
+  if (res.ok) toast('Track updated');
+  else toast('Failed to update', true);
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/admin/stream-status', { headers: { 'x-admin-key': ADMIN_KEY } });
+    if (res.ok) {
+      const d = await res.json();
+      document.getElementById('viewer-count').textContent = d.viewers + ' viewers';
+    }
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════════
+let toastTimer;
+function toast(msg, isErr) {
+  clearTimeout(toastTimer);
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = isErr ? '#ff4444' : '#ff4400';
+  el.style.display = 'block';
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLAYLIST
+// ═══════════════════════════════════════════════════════════════
+let playlist = [];  // { name, duration, buffer }
+
+async function addToPlaylist(files) {
+  if (!files || !files.length) return;
+  toast('Loading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '...');
+  let added = 0;
+  for (const file of Array.from(files)) {
+    if (!file.type.startsWith('audio')) { toast('Skipped non-audio: ' + file.name, true); continue; }
+    const buf = await decodeFileToBuffer(file);
+    if (!buf) { toast('Could not decode: ' + file.name, true); continue; }
+    playlist.push({ name: file.name.replace(/\.[^.]+$/, ''), duration: buf.duration, buffer: buf });
+    added++;
+  }
+  renderPlaylist();
+  if (added) toast('Added ' + added + ' track' + (added > 1 ? 's' : '') + ' to playlist');
+}
+
+function decodeFileToBuffer(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try { resolve(await audioCtx.decodeAudioData(e.target.result.slice(0))); }
+      catch { resolve(null); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function removeFromPlaylist(idx) {
+  if (autoDJActive && (idx === autoDJCurrentIdx)) {
+    toast('Cannot remove currently playing track', true); return;
+  }
+  playlist.splice(idx, 1);
+  if (autoDJActive && autoDJCurrentIdx > idx) autoDJCurrentIdx--;
+  renderPlaylist();
+}
+
+function loadPlaylistTrack(idx, deckId) {
+  const t = playlist[idx];
+  if (!t) return;
+  const deck = decks[deckId];
+  if (deck.playing) stopDeck(deckId);
+  deck.buffer   = t.buffer;
+  deck.duration = t.duration;
+  deck.pauseOffset = 0;
+  document.getElementById('trackName' + deckId).textContent = t.name;
+  drawWaveform(t.buffer, deckId);
+}
+
+function fmtTime(s) {
+  s = Math.max(0, s || 0);
+  return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+}
+
+function renderPlaylist() {
+  const container = document.getElementById('playlist-tracks');
+  if (!playlist.length) {
+    container.innerHTML = '<div class="pl-empty">No tracks — click "+ Add Tracks" to load music files</div>';
+    return;
+  }
+  container.innerHTML = playlist.map((t, i) => {
+    const isCurrent = autoDJActive && i === autoDJCurrentIdx;
+    const isNext    = autoDJActive && i === autoDJCurrentIdx + 1;
+    let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '');
+    return `<div class="${cls}" id="pl-item-${i}">
+      <span class="pl-num">${isCurrent ? '▶' : i + 1}</span>
+      <span class="pl-name" title="${esc(t.name)}">${esc(t.name)}</span>
+      <span class="pl-dur">${fmtTime(t.duration)}</span>
+      <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'A')">→A</button>
+      <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'B')">→B</button>
+      <button class="pl-del" onclick="removeFromPlaylist(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTO DJ
+// ═══════════════════════════════════════════════════════════════
+function toggleAutoDJ() {
+  if (autoDJActive) stopAutoDJ(); else startAutoDJ();
+}
+
+function startAutoDJ() {
+  if (!playlist.length) { toast('Add tracks to the playlist first', true); return; }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  autoDJActive        = true;
+  autoDJCurrentIdx    = 0;
+  autoDJActiveDeck    = 'A';
+  autoDJTransitioning = false;
+
+  document.getElementById('autoDJBtn').classList.add('on');
+  document.getElementById('autoDJBtn').textContent = '⏹ STOP AUTO DJ';
+
+  // Load current track on A, set crossfader full-left
+  loadPlaylistTrack(0, 'A');
+  document.getElementById('crossfader').value = 0;
+  setCrossfader(0);
+
+  // Pre-load next track on B so it's ready when the crossfade begins
+  if (playlist.length > 1) loadPlaylistTrack(1, 'B');
+
+  setTimeout(() => {
+    playDeck('A', 0);
+    toast('Auto DJ started — ' + playlist.length + ' tracks');
+    renderPlaylist();
+  }, 80);
+}
+
+function stopAutoDJ() {
+  autoDJActive        = false;
+  autoDJCurrentIdx    = -1;
+  autoDJTransitioning = false;
+  document.getElementById('autoDJBtn').classList.remove('on');
+  document.getElementById('autoDJBtn').textContent = '▶▶ AUTO DJ';
+  setCfAutoStatus('');
+  toast('Auto DJ stopped');
+  renderPlaylist();
+}
+
+function setCfAutoStatus(text) {
+  const el = document.getElementById('cfAutoStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'cf-auto-status' + (text ? ' visible' : '');
+}
+
+// Called every animation frame via updateTimers() → drawViz() RAF
+function autoDJTick() {
+  if (!autoDJActive || autoDJTransitioning) return;
+  const deck = decks[autoDJActiveDeck];
+  if (!deck.playing || !deck.buffer) return;
+
+  const elapsed   = audioCtx.currentTime - deck.startTime;
+  const remaining = deck.duration - elapsed;
+
+  if (remaining <= autoDJCrossfadeTime) {
+    const nextIdx = autoDJCurrentIdx + 1;
+    if (nextIdx >= playlist.length) {
+      if (remaining <= 0.2) stopAutoDJ();
+      return;
+    }
+    startAutoDJTransition(nextIdx);
+  }
+}
+
+function startAutoDJTransition(nextIdx) {
+  autoDJTransitioning = true;
+  const fromDeck = autoDJActiveDeck;
+  const toDeck   = fromDeck === 'A' ? 'B' : 'A';
+
+  // If toDeck doesn't have the right track pre-loaded, load it now
+  const expectedTrack = playlist[nextIdx];
+  if (!decks[toDeck].buffer || decks[toDeck].buffer !== expectedTrack.buffer) {
+    loadPlaylistTrack(nextIdx, toDeck);
+  }
+
+  const fromVal = fromDeck === 'A' ? 0 : 1;
+  const toVal   = fromDeck === 'A' ? 1 : 0;
+  const arrow   = fromDeck === 'A' ? 'A ──→ B' : 'B ──→ A';
+  setCfAutoStatus(arrow);
+
+  setTimeout(() => {
+    playDeck(toDeck, 0);
+
+    animateCrossfader(fromVal, toVal, autoDJCrossfadeTime, () => {
+      stopDeck(fromDeck);
+      autoDJCurrentIdx    = nextIdx;
+      autoDJActiveDeck    = toDeck;
+      autoDJTransitioning = false;
+      setCfAutoStatus('');
+      renderPlaylist();
+
+      // Pre-load the NEXT track on the now-free deck
+      const preloadIdx = nextIdx + 1;
+      if (preloadIdx < playlist.length) loadPlaylistTrack(preloadIdx, fromDeck);
+
+      const el = document.getElementById('pl-item-' + nextIdx);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, 80);
+}
+
+function animateCrossfader(from, to, durationSec, onDone) {
+  const startMs    = performance.now();
+  const durationMs = durationSec * 1000;
+  (function step(now) {
+    const t    = Math.min((now - startMs) / durationMs, 1);
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const val  = from + (to - from) * ease;
+    decks.A.outGain.gain.value = 1 - val;
+    decks.B.outGain.gain.value = val;
+    document.getElementById('crossfader').value = val;
+    if (t < 1) requestAnimationFrame(step);
+    else if (onDone) onDone();
+  })(startMs);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+if (!ADMIN_KEY) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">
+      <div style="color:#ff4400;font-size:1.4em;font-weight:bold">Admin Key Required</div>
+      <div style="color:#888">Open this page as: /dj.html?key=YOUR_ADMIN_KEY</div>
+      <a href="/admin-login.html" style="color:#ff4400">Go to Admin Login</a>
+    </div>`;
+} else {
+  connectChat();
+  setInterval(pollStatus, 5000);
+  pollStatus();
+  // Resume audio context on first interaction
+  document.addEventListener('click', () => {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }, { once: false });
+}
+</script>
+</body>
+</html>

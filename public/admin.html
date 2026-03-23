@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #111;
+      border-bottom: 2px solid #ff4400;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 { font-size: 1.3em; color: #ff4400; letter-spacing: 2px; }
+
+    .header-right { display: flex; align-items: center; gap: 16px; font-size: 0.9em; }
+
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .dot-live { background: #44ff44; box-shadow: 0 0 6px #44ff44; }
+    .dot-off  { background: #666; }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid #555;
+      color: #aaa;
+      padding: 5px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .logout-btn:hover { border-color: #ff4400; color: #ff4400; }
+
+    /* ── Stats bar ── */
+    .stats {
+      display: flex;
+      gap: 16px;
+      padding: 16px 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px 22px;
+      min-width: 140px;
+      text-align: center;
+    }
+
+    .stat-card .val {
+      font-size: 2em;
+      font-weight: bold;
+      color: #ff4400;
+    }
+    .stat-card .lbl { color: #888; font-size: 0.8em; margin-top: 4px; }
+
+    /* ── Main content ── */
+    .content { padding: 0 24px 40px; }
+
+    .section-title {
+      font-size: 1em;
+      font-weight: bold;
+      color: #888;
+      letter-spacing: 1px;
+      margin: 20px 0 12px;
+      text-transform: uppercase;
+    }
+
+    /* ── User table ── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92em;
+    }
+
+    th {
+      background: #1a1a1a;
+      padding: 10px 14px;
+      text-align: left;
+      color: #888;
+      font-weight: normal;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #333;
+    }
+
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid #1e1e1e;
+      vertical-align: middle;
+    }
+
+    tr:hover td { background: #161616; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 0.78em;
+      font-weight: bold;
+    }
+    .badge-trial   { background: #332200; color: #ffcc00; }
+    .badge-paid    { background: #002211; color: #44ff88; }
+    .badge-expired { background: #220000; color: #ff6666; }
+
+    /* ── Actions ── */
+    .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .days-input {
+      width: 70px;
+      padding: 5px 8px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.85em;
+      outline: none;
+    }
+    .days-input:focus { border-color: #ff4400; }
+
+    .btn-extend {
+      padding: 5px 12px;
+      background: #003322;
+      border: 1px solid #44ff88;
+      color: #44ff88;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82em;
+    }
+    .btn-extend:hover { background: #004433; }
+
+    .btn-delete {
+      padding: 5px 10px;
+      background: #220000;
+      border: 1px solid #ff4444;
+      color: #ff6666;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82em;
+    }
+    .btn-delete:hover { background: #330000; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #222;
+      border: 1px solid #ff4400;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9em;
+      display: none;
+      z-index: 999;
+    }
+
+    .empty { color: #555; padding: 20px 0; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>DJ ADMIN</h1>
+    <div class="header-right">
+      <span id="stream-status">
+        <span class="status-dot dot-off" id="status-dot"></span>
+        <span id="status-text">Loading...</span>
+      </span>
+      <span id="viewer-count" style="color:#888"></span>
+      <button class="logout-btn" onclick="adminLogout()">Logout</button>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="val" id="stat-total">—</div>
+      <div class="lbl">Total Users</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" id="stat-trial">—</div>
+      <div class="lbl">Free Trial</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" id="stat-paid">—</div>
+      <div class="lbl">Paid</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" id="stat-expired">—</div>
+      <div class="lbl">Expired</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" id="stat-watching">—</div>
+      <div class="lbl">Watching Now</div>
+    </div>
+  </div>
+
+  <!-- User list -->
+  <div class="content">
+    <div class="section-title">Users</div>
+    <div class="table-wrap">
+      <table id="users-table">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Registered</th>
+            <th>Status</th>
+            <th>Days Left</th>
+            <th>Paid Until</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="6" class="empty">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    let users = [];
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+      await Promise.all([loadUsers(), loadStreamStatus()]);
+      setInterval(loadUsers, 30000);
+      setInterval(loadStreamStatus, 5000);
+    }
+
+    // ── Stream status ─────────────────────────────────────────────────────────
+    async function loadStreamStatus() {
+      try {
+        const res = await fetch('/api/admin/stream-status');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const data = await res.json();
+
+        const dot  = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        const vc   = document.getElementById('viewer-count');
+        const sw   = document.getElementById('stat-watching');
+
+        if (data.live) {
+          dot.className  = 'status-dot dot-live';
+          text.textContent = 'LIVE';
+          text.style.color = '#44ff44';
+        } else {
+          dot.className  = 'status-dot dot-off';
+          text.textContent = 'Offline';
+          text.style.color = '#666';
+        }
+
+        vc.textContent = data.viewers + ' watching';
+        sw.textContent = data.viewers;
+      } catch {}
+    }
+
+    // ── User list ─────────────────────────────────────────────────────────────
+    async function loadUsers() {
+      try {
+        const res = await fetch('/admin/users');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        users = await res.json();
+        renderUsers();
+      } catch {}
+    }
+
+    function renderUsers() {
+      const tbody = document.getElementById('users-tbody');
+
+      // Stats
+      document.getElementById('stat-total').textContent   = users.length;
+      document.getElementById('stat-trial').textContent   = users.filter(u => u.status === 'trial').length;
+      document.getElementById('stat-paid').textContent    = users.filter(u => u.status === 'paid').length;
+      document.getElementById('stat-expired').textContent = users.filter(u => u.status === 'expired').length;
+
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No users yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td><strong>${esc(u.username)}</strong></td>
+          <td style="color:#888">${fmtDate(u.registeredAt)}</td>
+          <td><span class="badge badge-${u.status}">${u.status.toUpperCase()}</span></td>
+          <td>${u.daysLeft > 0 ? u.daysLeft + 'd' : '—'}</td>
+          <td style="color:#888;font-size:0.85em">${u.paidUntil ? fmtDate(u.paidUntil) : '—'}</td>
+          <td>
+            <div class="action-row">
+              <input type="number" class="days-input" id="days-${esc(u.username)}" value="30" min="1" max="3650">
+              <button class="btn-extend" onclick="extendUser('${esc(u.username)}')">+ Extend</button>
+              <button class="btn-delete" onclick="deleteUser('${esc(u.username)}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+    async function extendUser(username) {
+      const daysEl = document.getElementById('days-' + username);
+      const days = parseInt(daysEl ? daysEl.value : 30, 10);
+      if (!days || days < 1) { toast('Enter a valid number of days'); return; }
+
+      const res = await fetch('/admin/extend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, days })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`Extended ${username} by ${days} days`);
+        loadUsers();
+      } else {
+        toast(data.error || 'Error', true);
+      }
+    }
+
+    async function deleteUser(username) {
+      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+
+      const res = await fetch('/admin/users/' + encodeURIComponent(username), { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`Deleted ${username}`);
+        loadUsers();
+      } else {
+        toast(data.error || 'Error', true);
+      }
+    }
+
+    async function adminLogout() {
+      await fetch('/admin/logout', { method: 'POST' });
+      window.location.href = '/admin-login.html';
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function fmtDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function toast(msg, isErr) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.borderColor = isErr ? '#ff4444' : '#ff4400';
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
