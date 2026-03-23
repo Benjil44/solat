@@ -73,8 +73,15 @@ app.get('/api/status', requireAuth, (req, res) => {
   });
 });
 
-// Protected HLS segments
-app.use('/live', requireAuth, express.static(HLS_PATH));
+// Protected HLS segments — no browser caching for live content
+app.use('/live', requireAuth, (req, res, next) => {
+  if (req.path.endsWith('.m3u8') || req.path.endsWith('.ts')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+}, express.static(HLS_PATH));
 
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
 app.get('/api/admin/stream-status', requireAdmin, (req, res) => {

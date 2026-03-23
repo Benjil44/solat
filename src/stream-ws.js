@@ -88,8 +88,8 @@ function startFFmpeg() {
     // HLS — 2s segments cut at wall-clock (split_by_time), keep 8 segments server-side
     '-f', 'hls',
     '-hls_time', '2',
-    '-hls_list_size', '8',
-    '-hls_flags', 'delete_segments+append_list+split_by_time',
+    '-hls_list_size', '12',   // 24s of history; viewer starts 8s behind → 16s runway before live edge
+    '-hls_flags', 'delete_segments+split_by_time',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', hlsSegment,
     hlsIndex

@@ -154,24 +154,45 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .title-btn:hover{border-color:var(--accent);color:var(--accent)}
 .title-row{display:flex;gap:7px}
 
-/* ── CHAT PANEL ── */
-.chat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:0;display:flex;flex-direction:column;height:320px;grid-column:span 3}
-.chat-header{padding:10px 14px;border-bottom:1px solid var(--border);
-  font-size:.75em;font-weight:bold;color:var(--muted);letter-spacing:1px}
+/* ── CHAT DRAWER (fixed right-side panel) ── */
+.dj-chat-drawer{
+  position:fixed;top:0;right:0;bottom:0;width:320px;
+  background:var(--panel);border-left:2px solid var(--border);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  z-index:600}
+.dj-chat-drawer.open{transform:translateX(0)}
+.dj-chat-backdrop{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:599}
+.dj-chat-backdrop.show{display:block}
+.chat-header{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  font-size:.75em;font-weight:bold;color:var(--muted);letter-spacing:1px;
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.drawer-close{background:transparent;border:none;color:#666;
+  font-size:1.2em;cursor:pointer;padding:0 4px;line-height:1}
+.drawer-close:hover{color:#fff}
 .chat-messages{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:5px}
 .chat-msg{font-size:.82em;line-height:1.4;word-break:break-word}
 .chat-msg .who{font-weight:bold;margin-right:6px}
 .chat-msg.dj .who{color:var(--accent)}
 .chat-msg.viewer .who{color:#88aaff}
 .chat-msg.system{color:var(--muted);font-style:italic}
-.chat-input-row{display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border)}
+.chat-input-row{display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0}
 .chat-input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);
   border-radius:7px;color:#fff;font-size:.85em;outline:none}
 .chat-input:focus{border-color:var(--accent)}
 .chat-send-btn{padding:8px 14px;background:var(--accent);border:none;
   color:#fff;border-radius:7px;cursor:pointer;font-size:.85em;font-weight:bold}
 .chat-send-btn:hover{background:#e03d00}
+/* notification badge */
+.chat-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--red);color:#fff;font-size:.72em;font-weight:bold;
+  border-radius:10px;min-width:18px;height:18px;padding:0 4px;
+  margin-left:5px;vertical-align:middle}
+@keyframes badge-pop{0%{transform:scale(1.5)}100%{transform:scale(1)}}
+.chat-badge.pop{animation:badge-pop .25s ease-out}
 
 /* ── Effects ── */
 .fx-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
@@ -229,6 +250,54 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .pl-del{padding:2px 7px;border:none;background:transparent;
   color:#555;cursor:pointer;font-size:.84em;flex-shrink:0}
 .pl-del:hover{color:#ff4444}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes deck-flash{0%{background:rgba(68,255,136,.18)}100%{background:var(--card)}}
+.deck.flash-load{animation:deck-flash .55s ease-out}
+.pl-item.loading{pointer-events:none;border-color:#2a1500 !important}
+.pl-progress{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;
+  background:linear-gradient(90deg,rgba(255,80,0,.4) 0%,rgba(255,80,0,.12) 100%);
+  transition:width .1s linear;pointer-events:none;z-index:-1}
+.pl-spin{display:inline-block;animation:spin .7s linear infinite}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+
+/* Tablet ≤1000px: 2-col decks, center spans full width on top */
+@media(max-width:1000px){
+  .studio{grid-template-columns:1fr 1fr}
+  .center-col{
+    grid-column:1/-1;grid-row:1;
+    display:grid;grid-template-columns:1fr 1fr;gap:10px
+  }
+}
+
+/* Mobile ≤640px: single column stack */
+@media(max-width:640px){
+  header{padding:8px 12px}
+  header h1{font-size:.95em;letter-spacing:1px}
+  #viewer-count{display:none}
+
+  .studio{grid-template-columns:1fr;padding:8px;gap:8px}
+  .center-col{
+    grid-column:1;grid-row:1;
+    display:flex;flex-direction:column;gap:8px
+  }
+
+  .deck{padding:10px;gap:8px}
+  input.eq-knob{height:56px}
+  .t-btn{width:40px;height:40px}
+  .t-btn.play-btn{width:46px;height:46px;font-size:1.2em}
+  .load-area{padding:10px}
+
+  .cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .title-row{flex-direction:column}
+  .title-btn{align-self:flex-end;padding:7px 20px}
+
+  .playlist-panel{margin:0 8px 8px;padding:10px}
+  #playlist-tracks{max-height:160px}
+  .pl-deck-btn{display:none}
+  .autodj-row{margin-left:0;width:100%}
+  .dj-chat-drawer{width:100%}
+}
 </style>
 </head>
 <body>
@@ -242,6 +311,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span id="live-text">OFF AIR</span>
     </div>
     <span id="viewer-count">0 viewers</span>
+    <button class="hdr-btn" id="chatToggleBtn" onclick="toggleDJChat()">💬 Chat<span class="chat-badge" id="chat-badge" style="display:none">0</span></button>
     <button class="hdr-btn" onclick="window.location.href='/admin.html'">Admin</button>
   </div>
 </header>
@@ -449,18 +519,23 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     </div>
   </div>
 
-  <!-- ═══ CHAT PANEL ═══ -->
-  <div class="chat-card">
-    <div class="chat-header">LIVE CHAT — <span id="chat-count">0</span> connected</div>
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-row">
-      <input class="chat-input" id="chat-input" type="text" placeholder="Message viewers..."
-        maxlength="200" onkeydown="if(event.key==='Enter')sendChat()">
-      <button class="chat-send-btn" onclick="sendChat()">Send</button>
-    </div>
-  </div>
 
 </div><!-- /studio -->
+
+<!-- ═══ CHAT DRAWER ═══ -->
+<div class="dj-chat-backdrop" id="djChatBackdrop" onclick="toggleDJChat()"></div>
+<div class="dj-chat-drawer" id="djChatDrawer">
+  <div class="chat-header">
+    <span>💬 LIVE CHAT — <span id="chat-count">0</span> connected</span>
+    <button class="drawer-close" onclick="toggleDJChat()" title="Close">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-input-row">
+    <input class="chat-input" id="chat-input" type="text" placeholder="Message viewers..."
+      maxlength="200" onkeydown="if(event.key==='Enter')sendChat()">
+    <button class="chat-send-btn" onclick="sendChat()">Send</button>
+  </div>
+</div>
 
 <!-- ═══ PLAYLIST + AUTO DJ ═══ -->
 <div class="playlist-panel" id="playlist-panel"
@@ -1109,9 +1184,38 @@ function stopLive() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CHAT (WebSocket)
+//  CHAT (WebSocket) + DRAWER
 // ═══════════════════════════════════════════════════════════════
 let wsChat = null;
+let chatUnread = 0;
+let chatDrawerOpen = false;
+
+function toggleDJChat() {
+  chatDrawerOpen = !chatDrawerOpen;
+  document.getElementById('djChatDrawer').classList.toggle('open', chatDrawerOpen);
+  document.getElementById('djChatBackdrop').classList.toggle('show', chatDrawerOpen && window.innerWidth <= 640);
+  if (chatDrawerOpen) {
+    chatUnread = 0;
+    updateChatBadge();
+    // scroll to bottom when opened
+    const el = document.getElementById('chat-messages');
+    el.scrollTop = el.scrollHeight;
+    setTimeout(() => document.getElementById('chat-input').focus(), 50);
+  }
+}
+
+function updateChatBadge() {
+  const badge = document.getElementById('chat-badge');
+  if (chatUnread > 0 && !chatDrawerOpen) {
+    badge.textContent = chatUnread > 99 ? '99+' : chatUnread;
+    badge.style.display = 'inline-flex';
+    badge.classList.remove('pop');
+    void badge.offsetWidth;
+    badge.classList.add('pop');
+  } else {
+    badge.style.display = 'none';
+  }
+}
 
 function connectChat() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -1146,6 +1250,11 @@ function appendChat(msg) {
   el.scrollTop = el.scrollHeight;
   // Keep max 200 messages in DOM
   while (el.children.length > 200) el.removeChild(el.firstChild);
+  // Badge: count unread when drawer is closed (skip system messages from history)
+  if (!chatDrawerOpen && msg.type !== 'system') {
+    chatUnread++;
+    updateChatBadge();
+  }
 }
 
 function sendChat() {
@@ -1202,30 +1311,121 @@ function toast(msg, isErr) {
 // ═══════════════════════════════════════════════════════════════
 //  PLAYLIST
 // ═══════════════════════════════════════════════════════════════
-let playlist   = [];   // { name, duration, buffer }
-let dragSrcIdx = null; // index of playlist item being dragged for reorder
+let playlist     = [];   // { name, duration, buffer }
+let dragSrcIdx   = null; // index of playlist item being dragged for reorder
+let dblClickDeck = 'A'; // next deck to receive a double-clicked playlist item
+let loadQueue       = [];   // pending File objects
+let isProcessing    = false;
+let playlistCursor  = 0;    // next auto-load index after a crossfade completes
 
-async function addToPlaylist(files) {
-  if (!files || !files.length) return;
-  toast('Loading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '...');
-  let added = 0;
-  for (const file of Array.from(files)) {
-    if (!file.type.startsWith('audio')) { toast('Skipped non-audio: ' + file.name, true); continue; }
-    const buf = await decodeFileToBuffer(file);
-    if (!buf) { toast('Could not decode: ' + file.name, true); continue; }
-    playlist.push({ name: file.name.replace(/\.[^.]+$/, ''), duration: buf.duration, buffer: buf });
-    added++;
-  }
-  renderPlaylist();
-  if (added) toast('Added ' + added + ' track' + (added > 1 ? 's' : '') + ' to playlist');
+// ── Hardware-adaptive decode speed (ms per byte) ──────────────
+// Persisted via localStorage so calibration carries across sessions.
+// Updated with EMA (α=0.35) after every decoded file.
+let decodeRate = parseFloat(localStorage.getItem('djDecodeRate')) || null;
+
+function recordDecodeTime(ms, bytes) {
+  if (bytes <= 0 || ms <= 0) return;
+  const r = ms / bytes;
+  decodeRate = (decodeRate == null) ? r : (0.35 * r + 0.65 * decodeRate);
+  try { localStorage.setItem('djDecodeRate', decodeRate); } catch (_) {}
 }
 
-function decodeFileToBuffer(file) {
+// Called by button / drag-drop — just enqueues files, never blocks
+function addToPlaylist(files) {
+  if (!files || !files.length) return;
+  const fileArr    = Array.from(files);
+  const audioFiles = fileArr.filter(f => f.type.startsWith('audio'));
+  const skipped    = fileArr.length - audioFiles.length;
+  if (skipped) toast('Skipped ' + skipped + ' non-audio file' + (skipped > 1 ? 's' : ''), true);
+  if (!audioFiles.length) return;
+  loadQueue.push(...audioFiles);
+  if (!isProcessing) drainLoadQueue();
+}
+
+// Processes the queue one file at a time — new drops/adds just append to the queue
+async function drainLoadQueue() {
+  isProcessing = true;
+  while (loadQueue.length) {
+    const f = loadQueue.shift();
+    const t = { name: f.name.replace(/\.[^.]+$/, ''), duration: 0, buffer: null, loading: true, loadPct: 0 };
+    playlist.push(t);
+    renderPlaylist();
+
+    const buf = await decodeFileToBuffer(f, pct => {
+      t.loadPct = pct;
+      const i    = playlist.indexOf(t);
+      if (i < 0) return;
+      const prog  = document.getElementById('pl-prog-' + i);
+      const pctEl = document.getElementById('pl-pct-'  + i);
+      if (prog)  prog.style.width  = pct + '%';
+      if (pctEl) pctEl.textContent = pct + '%';
+    });
+
+    if (!buf) {
+      toast('Could not decode: ' + t.name, true);
+      playlist.splice(playlist.indexOf(t), 1);
+    } else {
+      t.buffer   = buf;
+      t.duration = buf.duration;
+      t.loading  = false;
+    }
+    renderPlaylist();
+  }
+  isProcessing = false;
+}
+
+function decodeFileToBuffer(file, onProgress) {
   return new Promise(resolve => {
     const reader = new FileReader();
+    if (onProgress) {
+      reader.onprogress = e => {
+        if (e.lengthComputable)
+          onProgress(Math.round((e.loaded / e.total) * 15));
+      };
+    }
     reader.onload = async e => {
-      try { resolve(await audioCtx.decodeAudioData(e.target.result.slice(0))); }
-      catch { resolve(null); }
+      if (onProgress) onProgress(15);
+
+      // Use calibrated hardware speed to predict decode duration.
+      // Default (500 ms/MB) is conservative so first-ever file errs toward slow-bar,
+      // not stalling at 98%. After each decode the EMA is updated and persisted.
+      const TICK  = 80; // ms per interval
+      const rate  = decodeRate ?? (500 / 1e6);           // ms per byte
+      const estMs = Math.max(400, file.size * rate);     // estimated decode time
+      const inc   = (90 - 15) / (estMs / TICK);         // reach 90% at expected finish
+
+      let pct = 15;
+      const timer = onProgress ? setInterval(() => {
+        pct = Math.min(pct + inc, 98);
+        onProgress(Math.round(pct));
+      }, TICK) : null;
+
+      const t0 = performance.now();
+      try {
+        const buf     = await audioCtx.decodeAudioData(e.target.result.slice(0));
+        const elapsed = performance.now() - t0;
+        recordDecodeTime(elapsed, file.size); // update calibration for next file
+
+        if (timer) clearInterval(timer);
+        if (onProgress) {
+          // Sweep from wherever the bar is to 100% — speed proportional to distance
+          // so a 30%→100% sweep feels the same as an 88%→100% snap
+          await new Promise(done => {
+            const from  = Math.round(pct);
+            const steps = Math.max(8, Math.round((100 - from) * 0.45));
+            let s = 0;
+            const ft = setInterval(() => {
+              s++;
+              onProgress(Math.round(from + (100 - from) * s / steps));
+              if (s >= steps) { clearInterval(ft); done(); }
+            }, 22);
+          });
+        }
+        resolve(buf);
+      } catch {
+        if (timer) clearInterval(timer);
+        resolve(null);
+      }
     };
     reader.readAsArrayBuffer(file);
   });
@@ -1252,6 +1452,52 @@ function loadPlaylistTrack(idx, deckId) {
   drawWaveform(t.buffer, deckId);
 }
 
+function plItemDblClick(e, idx) {
+  // Ignore double-clicks on buttons (→A, →B, ✕)
+  if (e.target.closest('button')) return;
+
+  const t = playlist[idx];
+  if (!t || t.loading) return;
+
+  const aPlaying = decks['A'].playing;
+  const bPlaying = decks['B'].playing;
+  let target;
+
+  if (!aPlaying && !bPlaying) {
+    // Both idle — use toggle to alternate
+    target = dblClickDeck;
+    dblClickDeck = target === 'A' ? 'B' : 'A';
+  } else if (aPlaying && !bPlaying) {
+    // A is playing → load into free deck B
+    target = 'B';
+  } else if (bPlaying && !aPlaying) {
+    // B is playing → load into free deck A
+    target = 'A';
+  } else {
+    // Both playing → load into the background deck (the one the crossfader is moving away from)
+    const cf = parseFloat(document.getElementById('crossfader').value);
+    target = cf >= 0.5 ? 'A' : 'B';
+  }
+
+  loadPlaylistTrack(idx, target);
+  if (idx + 1 > playlistCursor) playlistCursor = idx + 1;
+
+  // Deck A with nothing currently playing → auto-play; B is always cue-only
+  if (target === 'A' && !aPlaying) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    playDeck('A', 0);
+  }
+
+  const deckEl = document.getElementById('deck' + target);
+  deckEl.classList.remove('flash-load');
+  void deckEl.offsetWidth;
+  deckEl.classList.add('flash-load');
+  setTimeout(() => deckEl.classList.remove('flash-load'), 600);
+
+  const action = (target === 'A' && !aPlaying) ? '▶ Playing' : '⏸ Cued';
+  toast(action + ' on Deck ' + target + ' — ' + t.name.slice(0, 30));
+}
+
 function fmtTime(s) {
   s = Math.max(0, s || 0);
   return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -1264,10 +1510,21 @@ function renderPlaylist() {
     return;
   }
   container.innerHTML = playlist.map((t, i) => {
+    if (t.loading) {
+      const pct = t.loadPct || 0;
+      return `<div class="pl-item loading" id="pl-item-${i}">
+        <div class="pl-progress" id="pl-prog-${i}" style="width:${pct}%"></div>
+        <span class="pl-handle">⠿⠿</span>
+        <span class="pl-num"><span class="pl-spin">↻</span></span>
+        <span class="pl-name" title="${esc(t.name)}">${esc(t.name)}</span>
+        <span class="pl-dur" id="pl-pct-${i}">${pct}%</span>
+      </div>`;
+    }
     const isCurrent = autoDJActive && i === autoDJCurrentIdx;
     const isNext    = autoDJActive && i === autoDJCurrentIdx + 1;
     let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '');
     return `<div class="${cls}" id="pl-item-${i}" draggable="true"
+      ondblclick="plItemDblClick(event,${i})"
       ondragstart="plItemDragStart(event,${i})"
       ondragend="plItemDragEnd(event)"
       ondragover="plItemDragOver(event,${i})"
@@ -1493,8 +1750,28 @@ function startAutoDJTransition(nextIdx) {
   }, 80);
 }
 
+function autoLoadNextFromPlaylist(deckId) {
+  if (autoDJActive) return; // Auto DJ handles its own loading
+  // Skip any still-loading placeholders
+  while (playlistCursor < playlist.length && playlist[playlistCursor].loading)
+    playlistCursor++;
+  if (playlistCursor >= playlist.length) return;
+
+  const idx = playlistCursor++;
+  loadPlaylistTrack(idx, deckId);
+
+  const deckEl = document.getElementById('deck' + deckId);
+  deckEl.classList.remove('flash-load');
+  void deckEl.offsetWidth;
+  deckEl.classList.add('flash-load');
+  setTimeout(() => deckEl.classList.remove('flash-load'), 600);
+
+  toast('⏸ Next cued on Deck ' + deckId + ' — ' + playlist[idx].name.slice(0, 30));
+}
+
 function manualFade(to) {
-  const toDeckId = to === 1 ? 'B' : 'A';
+  const toDeckId   = to === 1 ? 'B' : 'A';
+  const fromDeckId = to === 1 ? 'A' : 'B';
   const deck = decks[toDeckId];
 
   // Target deck has no track — open file browser; fade will start after load
@@ -1513,7 +1790,11 @@ function manualFade(to) {
 
   const from = parseFloat(document.getElementById('crossfader').value);
   setCfAutoStatus(to === 1 ? 'A ──→ B' : 'B ──→ A');
-  animateCrossfader(from, to, cfFadeSec, () => setCfAutoStatus(''));
+  animateCrossfader(from, to, cfFadeSec, () => {
+    setCfAutoStatus('');
+    // Auto-cue the next playlist track on the now-free deck
+    autoLoadNextFromPlaylist(fromDeckId);
+  });
 }
 
 function animateCrossfader(from, to, durationSec, onDone) {

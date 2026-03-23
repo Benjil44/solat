@@ -137,6 +137,29 @@
     .chat-send-btn { padding:7px 12px; background:var(--accent); border:none;
       color:#fff; border-radius:6px; cursor:pointer; font-size:.8em; font-weight:bold; }
     .chat-send-btn:hover { background:#e03d00; }
+
+    /* ─── Responsive ──────────────────────────────────────────── */
+
+    /* Tablet: shrink chat panel */
+    @media(max-width:900px){
+      #chat-panel.open { width:240px; }
+    }
+
+    /* Mobile: chat becomes full-screen overlay, compress top bar */
+    @media(max-width:600px){
+      #topbar { padding:8px 10px; gap:6px; }
+      #topbar h1 { font-size:1em; letter-spacing:1px; }
+      #stream-title { max-width:90px; font-size:.78em; }
+      #sub-badge { display:none; }
+
+      #volume { flex:1; width:auto; min-width:0; }
+      #fullscreen-btn { display:none; }
+
+      #main { position:relative; overflow:hidden; }
+      #chat-panel { position:absolute; right:0; top:0; bottom:0;
+        z-index:20; border-left:none; width:0; }
+      #chat-panel.open { width:100%; }
+    }
   </style>
 </head>
 <body>
@@ -322,39 +345,43 @@
           enableWorker: true,
           maxBufferLength: 45,
           maxMaxBufferLength: 90,
-          liveSyncDurationCount: 4,
-          liveMaxLatencyDurationCount: 12,
+          liveSyncDurationCount: 4,        // start 8s behind live (4 × 2s segments)
+          liveMaxLatencyDurationCount: 8,  // never more than 16s behind; server keeps 24s
           liveSyncOnStallEnabled: true,
           maxBufferHole: 1.0,          // tolerate up to 1s holes without stalling
           nudgeMaxRetry: 8,            // retry nudge before giving up on stall
           highBufferWatchdogPeriod: 3, // check for high-buffer stall every 3s
-          manifestLoadingMaxRetry: 12,
-          manifestLoadingRetryDelay: 2000,
-          manifestLoadingMaxRetryTimeout: 64000,
+          manifestLoadingMaxRetry: 4,
+          manifestLoadingRetryDelay: 1000,
+          manifestLoadingMaxRetryTimeout: 8000,
           levelLoadingMaxRetry: 12,
           levelLoadingRetryDelay: 2000,
           fragLoadingMaxRetry: 12,
-          fragLoadingRetryDelay: 1500,
+          fragLoadingRetryDelay: 500,  // 500ms retry — new segment appears every 2s
         });
+        let manifestLoaded = false;
         hls.loadSource(url);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          manifestLoaded = true;
           isPlaying = true;
           hlsErrCount = 0;
           finishBufBar();
           hideOverlay();
           liveBadge.style.display = 'block';
           video.volume = 0;
-          video.muted  = false;
+          video.muted  = true;
           const targetVol = parseFloat(document.getElementById('volume').value);
-          video.play().catch(showPlayPrompt);
-          let v = 0;
-          const fadeIn = setInterval(() => {
-            v = Math.min(v + 0.05, targetVol);
-            video.volume = v;
-            if (v >= targetVol) clearInterval(fadeIn);
-          }, 60);
+          video.play().then(() => {
+            video.muted = false;
+            let v = 0;
+            const fadeIn = setInterval(() => {
+              v = Math.min(v + 0.05, targetVol);
+              video.volume = v;
+              if (v >= targetVol) clearInterval(fadeIn);
+            }, 60);
+          }).catch(showPlayPrompt);
         });
 
         // Reset error counter every time a fragment loads successfully
@@ -365,10 +392,15 @@
           hlsErrCount++;
 
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            // Segment temporarily unavailable (live edge, network hiccup) — wait & retry
-            // Never call stopStream() here; the DJ is still live, segments will appear
-            const delay = Math.min(500 * hlsErrCount, 4000);
-            setTimeout(() => { if (hls) hls.startLoad(); }, delay);
+            if (!manifestLoaded) {
+              // Manifest still 404 — destroy and let poll call startStream again in 3s
+              const delay = Math.min(500 * hlsErrCount, 3000);
+              setTimeout(() => { if (hls) { hls.destroy(); hls = null; } isPlaying = false; }, delay);
+            } else {
+              // Segment temporarily unavailable (live edge, network hiccup) — wait & retry
+              const delay = Math.min(500 * hlsErrCount, 4000);
+              setTimeout(() => { if (hls) hls.startLoad(); }, delay);
+            }
 
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             // Corrupt/incomplete segment — recover the codec in-place, no overlay shown
