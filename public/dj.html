@@ -201,9 +201,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .autodj-btn:hover{border-color:var(--accent);color:var(--accent)}
 .autodj-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);
   animation:pulse-border 1.5s infinite}
-#playlist-tracks{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow-y:auto;
-  border-radius:6px;transition:.15s}
-#playlist-tracks.files-over{outline:2px dashed var(--accent);background:#1a0a00}
+#playlist-tracks{display:flex;flex-direction:column;gap:2px;max-height:210px;min-height:48px;
+  overflow-y:auto;border-radius:6px}
+.playlist-panel.files-over{border-color:var(--accent);background:#1a0800;
+  outline:2px dashed var(--accent);outline-offset:-4px}
 .pl-empty{color:var(--muted);font-size:.82em;text-align:center;padding:18px 0}
 .pl-item{display:flex;align-items:center;gap:8px;padding:6px 10px;
   background:#0d0d0d;border-radius:6px;border:1px solid transparent;
@@ -462,7 +463,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 </div><!-- /studio -->
 
 <!-- ═══ PLAYLIST + AUTO DJ ═══ -->
-<div class="playlist-panel">
+<div class="playlist-panel" id="playlist-panel"
+  ondragover="plPanelDragOver(event)"
+  ondragleave="plPanelDragLeave(event)"
+  ondrop="plPanelDrop(event)">
   <div class="pl-header">
     <span class="pl-lbl">PLAYLIST</span>
     <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
@@ -477,10 +481,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="autodj-btn" id="autoDJBtn" onclick="toggleAutoDJ()">▶▶ AUTO DJ</button>
     </div>
   </div>
-  <div id="playlist-tracks"
-    ondragover="plTracksDragOver(event)"
-    ondragleave="plTracksDragLeave(event)"
-    ondrop="plTracksDrop(event)">
+  <div id="playlist-tracks">
     <div class="pl-empty">No tracks — click "+ Add Tracks" or drop audio files here</div>
   </div>
 </div>
@@ -1287,28 +1288,30 @@ function renderPlaylist() {
 //  PLAYLIST DRAG & DROP
 // ═══════════════════════════════════════════════════════════════
 
-// ── External files dragged over the tracks container ───────────
-function plTracksDragOver(e) {
+// ── Panel-level drag handlers (entire playlist-panel div) ──────
+function plPanelDragOver(e) {
   e.preventDefault();
-  if ([...e.dataTransfer.types].includes('Files')) {
+  const isFiles = [...e.dataTransfer.types].includes('Files');
+  if (isFiles) {
     e.dataTransfer.dropEffect = 'copy';
-    document.getElementById('playlist-tracks').classList.add('files-over');
+    document.getElementById('playlist-panel').classList.add('files-over');
   } else {
     e.dataTransfer.dropEffect = 'move';
   }
 }
-function plTracksDragLeave(e) {
-  if (!e.currentTarget.contains(e.relatedTarget))
-    document.getElementById('playlist-tracks').classList.remove('files-over');
+function plPanelDragLeave(e) {
+  // Only remove highlight when cursor actually leaves the whole panel
+  if (!document.getElementById('playlist-panel').contains(e.relatedTarget))
+    document.getElementById('playlist-panel').classList.remove('files-over');
 }
-function plTracksDrop(e) {
+function plPanelDrop(e) {
   e.preventDefault();
-  document.getElementById('playlist-tracks').classList.remove('files-over');
+  document.getElementById('playlist-panel').classList.remove('files-over');
   if (e.dataTransfer.files.length) {
     addToPlaylist(e.dataTransfer.files);
     return;
   }
-  // Internal reorder: dropped on empty space → append dragged item to end
+  // Internal reorder: dropped on empty panel space → append to end
   if (dragSrcIdx !== null) {
     const src = dragSrcIdx; dragSrcIdx = null;
     if (src < playlist.length - 1) {
@@ -1340,8 +1343,8 @@ function plItemDragEnd(e) {
 }
 function plItemDragOver(e, idx) {
   e.preventDefault();
-  e.stopPropagation();
-  if (dragSrcIdx === null || dragSrcIdx === idx) return;
+  // No stopPropagation — let the panel also receive the event to show files-over highlight
+  if (dragSrcIdx === null || dragSrcIdx === idx) return;  // files drag: no reorder indicator
   e.dataTransfer.dropEffect = 'move';
   const el = document.getElementById('pl-item-' + idx);
   const mid = el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
@@ -1353,8 +1356,11 @@ function plItemDragLeave(e) {
 }
 function plItemDrop(e, targetIdx) {
   e.preventDefault();
-  e.stopPropagation();
+  e.stopPropagation();  // prevent panel drop handler from also running
+  document.getElementById('playlist-panel').classList.remove('files-over');
   document.querySelectorAll('.pl-item').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+  // Files dropped onto an item → add to playlist (same as dropping on panel)
+  if (e.dataTransfer.files.length) { addToPlaylist(e.dataTransfer.files); return; }
   if (dragSrcIdx === null || dragSrcIdx === targetIdx) { dragSrcIdx = null; return; }
 
   const src = dragSrcIdx; dragSrcIdx = null;
