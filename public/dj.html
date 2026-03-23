@@ -50,8 +50,9 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
   text-overflow:ellipsis;color:var(--green)}
 
 /* ── Waveform / visualizer ── */
-.waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden}
+.waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden;cursor:pointer}
 canvas.waveform{display:block;width:100%;height:60px}
+canvas.waveform-cursor{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 
 /* ── Transport controls ── */
 .transport{display:flex;align-items:center;gap:8px}
@@ -237,8 +238,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="track-name" id="trackNameA">No track loaded</div>
 
     <!-- Waveform -->
-    <div class="waveform-wrap">
+    <div class="waveform-wrap" onclick="seekDeckByClick(event,'A')">
       <canvas class="waveform" id="waveformA" height="60"></canvas>
+      <canvas class="waveform-cursor" id="cursorA" height="60"></canvas>
     </div>
 
     <!-- Transport -->
@@ -362,8 +364,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     </div>
     <div class="track-name" id="trackNameB">No track loaded</div>
 
-    <div class="waveform-wrap">
+    <div class="waveform-wrap" onclick="seekDeckByClick(event,'B')">
       <canvas class="waveform" id="waveformB" height="60"></canvas>
+      <canvas class="waveform-cursor" id="cursorB" height="60"></canvas>
     </div>
 
     <div class="transport">
@@ -739,14 +742,61 @@ function drawWaveform(buffer, id) {
   ctx2.stroke();
 }
 
-// Time display
+// Time display + waveform cursor
 function updateTimers() {
   for (const id of ['A', 'B']) {
     const d = decks[id];
     const elapsed = d.playing ? (audioCtx.currentTime - d.startTime) : d.pauseOffset;
     document.getElementById('time' + id).textContent = fmt(elapsed) + ' / ' + fmt(d.duration);
+    drawWaveformCursor(id, elapsed, d.duration);
   }
   autoDJTick();
+}
+
+function drawWaveformCursor(id, elapsed, duration) {
+  const canvas = document.getElementById('cursor' + id);
+  if (!canvas) return;
+  // Match canvas pixel width to its display width
+  const dw = canvas.offsetWidth;
+  if (canvas.width !== dw * 2) canvas.width = dw * 2;
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  if (!duration) return;
+
+  const progress = Math.min(Math.max(elapsed / duration, 0), 1);
+  const x = Math.floor(progress * w);
+
+  // Played region — semi-transparent overlay
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillRect(0, 0, x, h);
+
+  // Cursor line
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, h);
+  ctx.stroke();
+
+  // Small triangle handle at top
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(x - 5, 0);
+  ctx.lineTo(x + 5, 0);
+  ctx.lineTo(x, 8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function seekDeckByClick(e, id) {
+  const deck = decks[id];
+  if (!deck.buffer) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  const newOffset = Math.max(0, Math.min(deck.duration, ratio * deck.duration));
+  deck.pauseOffset = newOffset;
+  if (deck.playing) playDeck(id, newOffset);
 }
 function fmt(s) {
   s = Math.max(0, Math.min(s || 0, 99 * 60 + 59));
