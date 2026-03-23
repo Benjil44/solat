@@ -62,13 +62,36 @@
 
     /* overlay (offline / buffering / tap-to-play) */
     #overlay { position:absolute; inset:0; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; background:rgba(0,0,0,.88); z-index:5; }
-    #overlay-icon { font-size:3.5em; margin-bottom:14px; }
-    #overlay-title { font-size:1.5em; font-weight:bold; margin-bottom:8px; }
-    #overlay-sub   { color:#888; font-size:.9em; text-align:center; max-width:280px; line-height:1.5; }
-    .spinner { width:44px; height:44px; border:5px solid #333; border-top-color:var(--accent);
-      border-radius:50%; animation:spin .8s linear infinite; margin-bottom:14px; }
-    @keyframes spin { to { transform:rotate(360deg); } }
+      align-items:center; justify-content:center; gap:18px;
+      background:rgba(0,0,0,.82); backdrop-filter:blur(10px); z-index:5; }
+    #overlay-title { font-size:1.35em; font-weight:bold; color:#fff; margin:0; }
+    #overlay-sub   { color:#666; font-size:.85em; text-align:center;
+      max-width:280px; line-height:1.6; margin:0; }
+    #overlay-countdown { font-size:.75em; color:#444; letter-spacing:1px; margin-top:-10px; }
+
+    /* Spinning vinyl disc for loading states */
+    .vinyl { width:96px; height:96px; border-radius:50%;
+      background:radial-gradient(circle at 50%,#222 18%,#111 18%,#111 22%,#1a1a1a 22%,
+        #0a0a0a 40%,#111 40%,#0d0d0d 55%,#111 55%,#0a0a0a 70%,#111 70%);
+      border:3px solid #333; position:relative; flex-shrink:0; }
+    .vinyl::after { content:''; position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%); width:18px; height:18px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 8px rgba(255,68,0,.6); }
+    .vinyl.spinning { animation:vinyl-spin 1.8s linear infinite; }
+    .vinyl.slow     { animation:vinyl-spin 4s linear infinite; opacity:.5; }
+    @keyframes vinyl-spin { to { transform:rotate(360deg); } }
+
+    /* Tap-to-play circle */
+    .play-circle { width:80px; height:80px; border-radius:50%;
+      background:rgba(255,68,0,.15); border:2px solid var(--accent);
+      display:flex; align-items:center; justify-content:center;
+      font-size:2.2em; cursor:pointer; transition:.2s;
+      animation:ring-pulse 1.8s ease-in-out infinite; }
+    .play-circle:hover { background:rgba(255,68,0,.35); transform:scale(1.08); }
+    @keyframes ring-pulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(255,68,0,.45); }
+      50%      { box-shadow:0 0 0 16px rgba(255,68,0,0); }
+    }
 
     /* LIVE badge */
     #live-badge { position:absolute; top:12px; left:12px; background:var(--accent); color:#fff;
@@ -154,8 +177,8 @@
         </div>
 
         <div id="overlay">
-          <div class="spinner"></div>
-          <div id="overlay-title">Connecting...</div>
+          <div class="vinyl spinning"></div>
+          <div id="overlay-title">Connecting…</div>
           <div id="overlay-sub">Please wait a moment</div>
         </div>
       </div>
@@ -187,7 +210,7 @@
     const overlay  = document.getElementById('overlay');
     const liveBadge = document.getElementById('live-badge');
     const bufBar   = document.getElementById('buf-bar');
-    let hls = null, pollTimer = null, heartbeatTimer = null;
+    let hls = null, pollTimer = null, heartbeatTimer = null, countdownInterval = null;
     let isPlaying = false, chatOpen = false, wsChat = null;
     let userToken = null;
 
@@ -275,11 +298,8 @@
     function startStream(streamKey) {
       const url = '/live/live/' + streamKey + '/index.m3u8';
 
-      // Show "buffering" state — don't hide overlay until manifest confirmed
-      overlay.style.display = 'flex';
-      overlay.innerHTML = `<div class="spinner"></div>
-        <div id="overlay-title">Connecting to stream...</div>
-        <div id="overlay-sub">DJ is live — loading segments</div>`;
+      // Show connecting state — don't hide overlay until manifest confirmed
+      showConnecting();
 
       // Animate buffer bar to show loading progress
       let bufPct = 10;
@@ -370,25 +390,51 @@
 
     // ── Overlay helpers ───────────────────────────────────────
     function showOffline() {
+      clearInterval(countdownInterval);
       overlay.style.display = 'flex';
       overlay.innerHTML = `
-        <div id="overlay-icon">📡</div>
-        <div id="overlay-title">Not Live</div>
-        <div id="overlay-sub">The DJ is offline right now.<br>We'll connect you automatically when they go live.</div>`;
+        <div class="vinyl slow"></div>
+        <div id="overlay-title">DJ Offline</div>
+        <div id="overlay-sub">We'll connect you automatically when the DJ goes live.</div>
+        <div id="overlay-countdown">Checking soon…</div>`;
+
+      let secs = isPlaying ? 8 : 3;
+      const tick = () => {
+        const el = document.getElementById('overlay-countdown');
+        if (!el) { clearInterval(countdownInterval); return; }
+        el.textContent = secs > 0 ? `Checking in ${secs}s` : 'Checking…';
+        if (--secs < 0) secs = isPlaying ? 7 : 2;
+      };
+      tick();
+      countdownInterval = setInterval(tick, 1000);
     }
-    function showPlayPrompt() {
+
+    function showConnecting() {
+      clearInterval(countdownInterval);
       overlay.style.display = 'flex';
       overlay.innerHTML = `
-        <div id="overlay-icon" style="font-size:4em;cursor:pointer" onclick="manualPlay()">▶</div>
+        <div class="vinyl spinning"></div>
+        <div id="overlay-title">Connecting to stream…</div>
+        <div id="overlay-sub">DJ is live — loading segments</div>`;
+    }
+
+    function showPlayPrompt() {
+      clearInterval(countdownInterval);
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <div class="play-circle" onclick="manualPlay()">▶</div>
         <div id="overlay-title">Tap to Play</div>
         <div id="overlay-sub">Your browser requires a tap to start audio</div>`;
     }
     function showOverlay(title, sub) {
+      clearInterval(countdownInterval);
       overlay.style.display = 'flex';
-      overlay.innerHTML = `<div id="overlay-icon">⚠️</div>
-        <div id="overlay-title">${title}</div><div id="overlay-sub">${sub}</div>`;
+      overlay.innerHTML = `
+        <div class="vinyl slow"></div>
+        <div id="overlay-title">${title}</div>
+        <div id="overlay-sub">${sub}</div>`;
     }
-    function hideOverlay() { overlay.style.display = 'none'; }
+    function hideOverlay() { clearInterval(countdownInterval); overlay.style.display = 'none'; }
     function manualPlay() { video.muted = false; video.play(); hideOverlay(); }
 
     // ── Controls ──────────────────────────────────────────────
