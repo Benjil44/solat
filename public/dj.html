@@ -99,11 +99,24 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   border-radius:12px;padding:14px}
 .cf-label{font-size:.7em;color:var(--muted);letter-spacing:1px;margin-bottom:8px;
   text-align:center;text-transform:uppercase}
-.cf-track{display:flex;align-items:center;gap:6px;font-size:.75em}
-.cf-track span{color:var(--muted);min-width:14px}
+.cf-track{display:flex;align-items:center;gap:6px}
 .cf-track input{flex:1;accent-color:var(--accent)}
-.cf-auto-status{text-align:center;font-size:.72em;font-weight:bold;letter-spacing:1px;
-  min-height:16px;margin-top:5px;transition:opacity .3s}
+.cf-fade-btn{background:transparent;border:1px solid var(--border);
+  border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.8em;font-weight:bold;
+  white-space:nowrap;transition:.15s;line-height:1.4}
+.cf-fade-btn.a{color:#4488ff;border-color:#4488ff55}
+.cf-fade-btn.a:hover:not(:disabled){background:#4488ff22;border-color:#4488ff}
+.cf-fade-btn.b{color:var(--accent);border-color:#ff440055}
+.cf-fade-btn.b:hover:not(:disabled){background:#ff440022;border-color:var(--accent)}
+.cf-fade-btn:disabled{opacity:.35;cursor:default}
+.cf-time-row{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.75em;color:var(--muted)}
+.cf-time-row input[type=number]{width:50px;background:#0a0a0a;border:1px solid var(--border);
+  color:var(--yellow);border-radius:5px;padding:3px 6px;font-size:1em;text-align:center;
+  -moz-appearance:textfield}
+.cf-time-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.cf-time-row input[type=number]:focus{outline:none;border-color:var(--yellow)}
+.cf-auto-status{flex:1;text-align:center;font-size:.72em;font-weight:bold;letter-spacing:1px;
+  min-height:16px;transition:opacity .3s}
 .cf-auto-status.visible{color:var(--yellow);animation:cfpulse .8s ease-in-out infinite}
 @keyframes cfpulse{0%,100%{opacity:1}50%{opacity:.4}}
 
@@ -307,12 +320,18 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="crossfader-card">
       <div class="cf-label">Crossfader</div>
       <div class="cf-track">
-        <span style="color:#4488ff;font-weight:bold">A</span>
+        <button class="cf-fade-btn a" id="cfBtnA" onclick="manualFade(0)" title="Fade to Deck A">◀ A</button>
         <input type="range" id="crossfader" min="0" max="1" step="0.01" value="0.5"
           oninput="setCrossfader(this.value)">
-        <span style="color:var(--accent);font-weight:bold">B</span>
+        <button class="cf-fade-btn b" id="cfBtnB" onclick="manualFade(1)" title="Fade to Deck B">B ▶</button>
       </div>
-      <div class="cf-auto-status" id="cfAutoStatus"></div>
+      <div class="cf-time-row">
+        <span>FADE</span>
+        <input type="number" id="cfFadeTime" min="1" max="120" value="8"
+          oninput="cfFadeSec=Math.max(1,(+this.value)||8)">
+        <span>sec</span>
+        <div class="cf-auto-status" id="cfAutoStatus"></div>
+      </div>
       <div class="master-vol-row">
         <span>MASTER</span>
         <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.9"
@@ -478,6 +497,10 @@ masterGain.gain.value = 0.9;
 
 // ── Deck state ────────────────────────────────────────────────
 const decks = { A: makeDeck(), B: makeDeck() };
+
+// ── Crossfader manual fade state ──────────────────────────────
+let cfFadeSec  = 8;    // manual fade duration (seconds)
+let cfAnimVer  = 0;    // increment to cancel any in-progress fade animation
 
 // ── Auto DJ state (declared here to avoid TDZ in RAF loop) ────
 let autoDJActive        = false;
@@ -1331,10 +1354,19 @@ function startAutoDJTransition(nextIdx) {
   }, 80);
 }
 
+function manualFade(to) {
+  const from = parseFloat(document.getElementById('crossfader').value);
+  if (Math.abs(from - to) < 0.02) return;  // already there
+  setCfAutoStatus(to === 1 ? 'A ──→ B' : 'B ──→ A');
+  animateCrossfader(from, to, cfFadeSec, () => setCfAutoStatus(''));
+}
+
 function animateCrossfader(from, to, durationSec, onDone) {
+  const ver        = ++cfAnimVer;           // cancels any previous fade
   const startMs    = performance.now();
   const durationMs = durationSec * 1000;
   (function step(now) {
+    if (cfAnimVer !== ver) return;          // cancelled by a newer fade
     const t    = Math.min((now - startMs) / durationMs, 1);
     const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     const val  = from + (to - from) * ease;
