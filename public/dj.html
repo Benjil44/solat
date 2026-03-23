@@ -756,7 +756,7 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // ═══════════════════════════════════════════════════════════════
 function drawWaveform(buffer, id) {
   const canvas = document.getElementById('waveform' + id);
-  const ctx2   = canvas.getContext('2d');
+  const ctx2   = canvas.getContext('2d', { willReadFrequently: true });
   canvas.width = (canvas.offsetWidth || 300) * 2;
   const w = canvas.width, h = canvas.height;
   const data = buffer.getChannelData(0);
