@@ -618,7 +618,7 @@ function togglePlay(id) {
 
 function playDeck(id, offset) {
   const deck = decks[id];
-  if (deck.source) { try { deck.source.stop(); } catch {} }
+  if (deck.source) { deck.source.onended = null; try { deck.source.stop(); } catch {} }
   deck.source = audioCtx.createBufferSource();
   deck.source.buffer = deck.buffer;
   deck.source.loop = false;
