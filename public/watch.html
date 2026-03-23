@@ -357,27 +357,25 @@
           }, 60);
         });
 
-        // Reset error counter on successful fragment load
+        // Reset error counter every time a fragment loads successfully
         hls.on(Hls.Events.FRAG_LOADED, () => { hlsErrCount = 0; });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (!data.fatal) return;   // non-fatal errors are handled internally by HLS.js
+          if (!data.fatal) return;  // HLS.js handles non-fatal errors internally
           hlsErrCount++;
 
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            // Network blip — retry with backoff, don't tear down the stream
-            const delay = Math.min(1000 * hlsErrCount, 8000);
-            if (hlsErrCount <= 6) {
-              setTimeout(() => { if (hls) hls.startLoad(); }, delay);
-            } else { finishBufBar(); stopStream(); }
+            // Segment temporarily unavailable (live edge, network hiccup) — wait & retry
+            // Never call stopStream() here; the DJ is still live, segments will appear
+            const delay = Math.min(500 * hlsErrCount, 4000);
+            setTimeout(() => { if (hls) hls.startLoad(); }, delay);
 
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            // Codec/segment decode error — recover in-place (brief glitch, no full reload)
-            if (hlsErrCount <= 4) {
-              setTimeout(() => { if (hls) hls.recoverMediaError(); }, 300);
-            } else { finishBufBar(); stopStream(); }
+            // Corrupt/incomplete segment — recover the codec in-place, no overlay shown
+            setTimeout(() => { if (hls) hls.recoverMediaError(); }, 200);
 
           } else {
+            // Truly unrecoverable (e.g. browser won't play HLS at all)
             finishBufBar(); stopStream();
           }
         });

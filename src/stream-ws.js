@@ -73,26 +73,23 @@ function startFFmpeg() {
 
   const args = [
     '-loglevel', 'warning',
-    // Robust timestamp handling — regenerate PTS, ignore DTS, skip corrupt packets
-    '-fflags', '+genpts+discardcorrupt+igndts',
+    '-fflags', '+genpts+discardcorrupt',   // regenerate pts, skip corrupted packets
     '-err_detect', 'ignore_err',
-    '-avoid_negative_ts', 'make_zero',     // reset negative timestamps to 0
     '-f', 'webm',
     '-i', 'pipe:0',
-    // Video — force keyframe every 2s so HLS segments start cleanly at keyframes
+    // Video — force keyframe every 2s so HLS segments always start cleanly
     '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
     '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k',
     '-g', '50',
     '-sc_threshold', '0',
     '-force_key_frames', 'expr:gte(t,n_forced*2)',
-    // Audio — resample asynchronously so timestamp gaps don't stall the encoder
+    // Audio
     '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k',
-    '-async', '1',                         // fix audio drift / small gaps silently
-    // HLS — cut at keyframes (not wall clock), keep 8 segments for a bigger server buffer
+    // HLS — 2s segments cut at wall-clock (split_by_time), keep 8 segments server-side
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '8',
-    '-hls_flags', 'delete_segments+append_list',   // removed split_by_time: cuts at keyframes only
+    '-hls_flags', 'delete_segments+append_list+split_by_time',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', hlsSegment,
     hlsIndex
