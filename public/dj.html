@@ -52,7 +52,6 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 /* ── Waveform / visualizer ── */
 .waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden;cursor:pointer}
 canvas.waveform{display:block;width:100%;height:60px}
-canvas.waveform-cursor{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 
 /* ── Transport controls ── */
 .transport{display:flex;align-items:center;gap:8px}
@@ -240,7 +239,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <!-- Waveform -->
     <div class="waveform-wrap" onclick="seekDeckByClick(event,'A')">
       <canvas class="waveform" id="waveformA" height="60"></canvas>
-      <canvas class="waveform-cursor" id="cursorA" height="60"></canvas>
     </div>
 
     <!-- Transport -->
@@ -366,7 +364,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
     <div class="waveform-wrap" onclick="seekDeckByClick(event,'B')">
       <canvas class="waveform" id="waveformB" height="60"></canvas>
-      <canvas class="waveform-cursor" id="cursorB" height="60"></canvas>
     </div>
 
     <div class="transport">
@@ -720,26 +717,35 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function drawWaveform(buffer, id) {
   const canvas = document.getElementById('waveform' + id);
   const ctx2   = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth * 2;
+  canvas.width = (canvas.offsetWidth || 300) * 2;
   const w = canvas.width, h = canvas.height;
   const data = buffer.getChannelData(0);
   const step = Math.ceil(data.length / w);
-  ctx2.fillStyle = '#0d0d0d';
-  ctx2.fillRect(0, 0, w, h);
-  ctx2.strokeStyle = id === 'A' ? '#4488ff' : '#ff4400';
-  ctx2.lineWidth = 1;
-  ctx2.beginPath();
-  for (let i = 0; i < w; i++) {
-    let min = 1, max = -1;
-    for (let j = 0; j < step; j++) {
-      const s = data[i * step + j] || 0;
-      if (s < min) min = s;
-      if (s > max) max = s;
+  const colorStr = id === 'A' ? '#4488ff' : '#ff4400';
+
+  function render(stroke) {
+    ctx2.fillStyle = '#0d0d0d';
+    ctx2.fillRect(0, 0, w, h);
+    ctx2.strokeStyle = stroke;
+    ctx2.lineWidth = 1;
+    ctx2.beginPath();
+    for (let i = 0; i < w; i++) {
+      let min = 1, max = -1;
+      for (let j = 0; j < step; j++) {
+        const s = data[i * step + j] || 0;
+        if (s < min) min = s;
+        if (s > max) max = s;
+      }
+      ctx2.moveTo(i, (1 + min) * h / 2);
+      ctx2.lineTo(i, (1 + max) * h / 2);
     }
-    ctx2.moveTo(i, (1 + min) * h / 2);
-    ctx2.lineTo(i, (1 + max) * h / 2);
+    ctx2.stroke();
+    return ctx2.getImageData(0, 0, w, h);
   }
-  ctx2.stroke();
+
+  const greyImg  = render('#3a3a4a');   // played — muted grey-blue
+  const colorImg = render(colorStr);    // unplayed — full color
+  decks[id].waveImg = { grey: greyImg, color: colorImg, w, h };
 }
 
 // Time display + waveform cursor
@@ -754,22 +760,19 @@ function updateTimers() {
 }
 
 function drawWaveformCursor(id, elapsed, duration) {
-  const canvas = document.getElementById('cursor' + id);
-  if (!canvas) return;
-  // Match canvas pixel width to its display width
-  const dw = canvas.offsetWidth;
-  if (canvas.width !== dw * 2) canvas.width = dw * 2;
-  const w = canvas.width, h = canvas.height;
+  const deck = decks[id];
+  if (!deck.waveImg) return;
+  const { grey, color, w, h } = deck.waveImg;
+  const canvas = document.getElementById('waveform' + id);
+  if (canvas.width !== w) return;   // canvas resized — skip until next waveform draw
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, w, h);
-  if (!duration) return;
 
-  const progress = Math.min(Math.max(elapsed / duration, 0), 1);
+  const progress = duration ? Math.min(Math.max(elapsed / duration, 0), 1) : 0;
   const x = Math.floor(progress * w);
 
-  // Played region — semi-transparent overlay
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  ctx.fillRect(0, 0, x, h);
+  // Grey for played portion, full color for unplayed
+  if (x > 0)     ctx.putImageData(grey,  0, 0, 0, 0, x,     h);
+  if (x < w - 1) ctx.putImageData(color, 0, 0, x, 0, w - x, h);
 
   // Cursor line
   ctx.strokeStyle = '#ffffff';
@@ -779,12 +782,12 @@ function drawWaveformCursor(id, elapsed, duration) {
   ctx.lineTo(x, h);
   ctx.stroke();
 
-  // Small triangle handle at top
+  // Triangle handle at top
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.moveTo(x - 5, 0);
   ctx.lineTo(x + 5, 0);
-  ctx.lineTo(x, 8);
+  ctx.lineTo(x, 9);
   ctx.closePath();
   ctx.fill();
 }
