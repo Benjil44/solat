@@ -7,12 +7,13 @@ const NodeMediaServer = require('node-media-server');
 const cookieParser = require('cookie-parser');
 const cors        = require('cors');
 const path        = require('path');
+const fs          = require('fs');
 
 const rateLimit   = require('express-rate-limit');
 const authRoutes  = require('./src/auth');
 const adminRoutes = require('./src/admin');
 const { verifyToken } = require('./src/users');
-const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive } = require('./src/stream-ws');
+const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce }   = require('./src/chat-ws');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -94,7 +95,43 @@ app.use('/live', requireAuth, (req, res, next) => {
 
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
 app.get('/api/admin/stream-status', requireAdmin, (req, res) => {
-  res.json({ live: isLive || isBrowserLive(), streamKey: STREAM_KEY, viewers: viewers.size, title: getStreamTitle() });
+  res.json({
+    live: isLive || isBrowserLive(),
+    streamKey: STREAM_KEY,
+    viewers: viewers.size,
+    title: getStreamTitle(),
+    recording: !!getCurrentRecording(),
+    sessionStart: getSessionStartTime(),
+  });
+});
+
+// Setlist for current session
+app.get('/api/admin/setlist', requireAdmin, (req, res) => {
+  res.json({ setlist: getSetlist(), sessionStart: getSessionStartTime() });
+});
+
+// List recordings
+const REC_DIR = path.join(__dirname, 'media', 'recordings');
+app.get('/api/admin/recordings', requireAdmin, (req, res) => {
+  try {
+    fs.mkdirSync(REC_DIR, { recursive: true });
+    const files = fs.readdirSync(REC_DIR)
+      .filter(f => f.endsWith('.webm'))
+      .map(f => {
+        const stat = fs.statSync(path.join(REC_DIR, f));
+        return { name: f, size: stat.size, date: stat.mtime };
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ recordings: files });
+  } catch { res.json({ recordings: [] }); }
+});
+
+// Download a recording
+app.get('/api/admin/recordings/:file', requireAdmin, (req, res) => {
+  const file = path.basename(req.params.file); // prevent path traversal
+  const full = path.join(REC_DIR, file);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Not found' });
+  res.download(full);
 });
 
 app.post('/api/admin/title', requireAdmin, (req, res) => {
@@ -225,6 +262,33 @@ app.use((err, req, res, next) => {
   if (req.accepts('html')) return res.status(500).send('<h1 style="font-family:sans-serif;color:#ff4400">500 — Server Error</h1>');
   res.status(500).json({ error: 'Internal server error' });
 });
+
+// ─── User data auto-backup ────────────────────────────────────────────────────
+const USERS_DB   = path.join(__dirname, 'data', 'users.json');
+const BACKUP_DIR = path.join(__dirname, 'data', 'backups');
+
+function backupUsers() {
+  if (!fs.existsSync(USERS_DB)) return;
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const dest  = path.join(BACKUP_DIR, `users_${stamp}.json`);
+  try {
+    fs.copyFileSync(USERS_DB, dest);
+    // Keep only last 30 backups
+    const all = fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith('users_') && f.endsWith('.json'))
+      .sort();
+    if (all.length > 30) {
+      all.slice(0, all.length - 30).forEach(f => {
+        try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch (_) {}
+      });
+    }
+    console.log('[BACKUP] users.json →', dest);
+  } catch (e) { console.error('[BACKUP] Failed:', e.message); }
+}
+
+backupUsers();                              // run on startup
+setInterval(backupUsers, 24 * 60 * 60 * 1000); // then every 24h
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(HTTP_PORT, () => {

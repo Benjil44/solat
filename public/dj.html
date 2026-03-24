@@ -206,6 +206,39 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color:var(--muted);border-radius:5px;cursor:pointer;font-size:.75em}
 .fx-btn.active{background:#1a0800;border-color:var(--yellow);color:var(--yellow)}
 
+/* OBS info panel */
+.obs-panel{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;display:none;flex-direction:column;gap:8px;margin-top:4px}
+.obs-panel.show{display:flex}
+.obs-row{display:flex;align-items:center;gap:6px}
+.obs-label{font-size:.68em;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1px;min-width:40px}
+.obs-val{flex:1;font-size:.78em;color:#ddd;background:#0a0a0a;
+  border:1px solid #2a2a2a;border-radius:5px;padding:5px 8px;
+  font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs-copy{padding:4px 9px;background:var(--panel);border:1px solid var(--border);
+  color:#888;border-radius:5px;cursor:pointer;font-size:.72em;white-space:nowrap;flex-shrink:0}
+.obs-copy:hover{border-color:var(--accent);color:var(--accent)}
+.obs-toggle{width:100%;padding:7px;background:var(--panel);border:1px solid var(--border);
+  color:#888;border-radius:7px;cursor:pointer;font-size:.78em;margin-top:4px}
+.obs-toggle:hover{border-color:#4488ff;color:#4488ff}
+
+/* Setlist panel */
+.setlist-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin:0 10px 10px;display:flex;flex-direction:column;gap:8px}
+.setlist-header{display:flex;align-items:center;justify-content:space-between}
+.setlist-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;
+  color:var(--muted);text-transform:uppercase}
+.setlist-dl{padding:5px 13px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;color:#ccc;cursor:pointer;font-size:.78em}
+.setlist-dl:hover{border-color:var(--accent);color:var(--accent)}
+#setlist-items{display:flex;flex-direction:column;gap:2px;max-height:160px;overflow-y:auto}
+.setlist-empty{color:var(--muted);font-size:.82em;text-align:center;padding:12px 0}
+.setlist-row{display:flex;align-items:center;gap:8px;padding:5px 8px;
+  background:#0d0d0d;border-radius:5px;font-size:.8em}
+.setlist-time{color:var(--muted);font-size:.75em;min-width:46px;flex-shrink:0}
+.setlist-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
+
 /* Record mix button */
 .record-btn{width:100%;padding:10px;border:1px solid #333;border-radius:8px;
   background:var(--panel);color:#aaa;cursor:pointer;font-size:.88em;font-weight:bold;
@@ -468,6 +501,21 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       </button>
       <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
       <div class="rec-timer" id="recTimer"></div>
+
+      <!-- OBS Setup -->
+      <button class="obs-toggle" onclick="toggleOBSPanel()">🎛 OBS / External Source</button>
+      <div class="obs-panel" id="obsPanel">
+        <div class="obs-row">
+          <span class="obs-label">RTMP</span>
+          <span class="obs-val" id="obsRtmp"></span>
+          <button class="obs-copy" onclick="copyOBS('rtmp')">Copy</button>
+        </div>
+        <div class="obs-row">
+          <span class="obs-label">Key</span>
+          <span class="obs-val" id="obsKey"></span>
+          <button class="obs-copy" onclick="copyOBS('key')">Copy</button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -566,6 +614,18 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="pl-empty">No tracks — click "+ Add Tracks" or drop audio files here</div>
   </div>
 </div><!-- /playlist-panel -->
+
+<!-- ═══ SETLIST ═══ -->
+<div class="setlist-card">
+  <div class="setlist-header">
+    <span class="setlist-lbl">🎵 Setlist</span>
+    <button class="setlist-dl" onclick="downloadSetlist()">⬇ Download .txt</button>
+  </div>
+  <div id="setlist-items">
+    <div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>
+  </div>
+</div>
+
 </div><!-- /main-content -->
 
 <!-- ═══ CHAT DRAWER ═══ -->
@@ -1110,7 +1170,8 @@ let isLive          = false;
 let broadcastStream = null;   // kept alive across reconnects
 let reconnectCount  = 0;
 const MAX_RECONNECT = 8;
-const ADMIN_KEY = new URLSearchParams(window.location.search).get('key') || '';
+const ADMIN_KEY  = new URLSearchParams(window.location.search).get('key') || '';
+let   STREAM_KEY = 'djlive'; // populated from status API on load
 
 function toggleLive() {
   if (isLive) stopLive(); else startLive();
@@ -1367,6 +1428,73 @@ function saveMixFile() {
   toast('Mix saved: mix_' + stamp + '.webm');
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  OBS INFO PANEL
+// ═══════════════════════════════════════════════════════════════
+(function initOBS() {
+  const rtmp = `rtmp://${location.hostname}:1935/live`;
+  document.getElementById('obsRtmp').textContent = rtmp;
+  document.getElementById('obsKey').textContent  = STREAM_KEY;
+})();
+
+function toggleOBSPanel() {
+  document.getElementById('obsPanel').classList.toggle('show');
+}
+
+function copyOBS(which) {
+  const text = which === 'rtmp'
+    ? document.getElementById('obsRtmp').textContent
+    : document.getElementById('obsKey').textContent;
+  navigator.clipboard.writeText(text).then(() => toast('Copied!'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SETLIST
+// ═══════════════════════════════════════════════════════════════
+let setlistCache = [];
+
+async function fetchSetlist() {
+  try {
+    const res = await fetch('/api/admin/setlist', { headers: { 'x-admin-key': ADMIN_KEY } });
+    if (!res.ok) return;
+    const d = await res.json();
+    setlistCache = d.setlist || [];
+    renderSetlist();
+  } catch {}
+}
+
+function renderSetlist() {
+  const el = document.getElementById('setlist-items');
+  if (!setlistCache.length) {
+    el.innerHTML = '<div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>';
+    return;
+  }
+  el.innerHTML = setlistCache.map((e, i) => {
+    const t = new Date(e.time);
+    const hm = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
+    return `<div class="setlist-row">
+      <span class="setlist-time">${i+1}. ${hm}</span>
+      <span class="setlist-title" title="${esc(e.title)}">${esc(e.title)}</span>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function downloadSetlist() {
+  if (!setlistCache.length) return toast('No setlist yet');
+  const lines = ['SETLIST\n' + new Date().toLocaleDateString() + '\n',
+    ...setlistCache.map((e, i) => {
+      const t = new Date(e.time);
+      const hm = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
+      return `${i+1}. [${hm}] ${e.title}`;
+    })
+  ].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/plain,' + encodeURIComponent(lines);
+  a.download = 'setlist_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -1383,7 +1511,7 @@ async function updateTitle() {
     headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
     body: JSON.stringify({ title, cover })
   });
-  if (res.ok) toast('Track updated');
+  if (res.ok) { toast('Track updated'); setTimeout(fetchSetlist, 300); }
   else toast('Failed to update', true);
 }
 
@@ -1393,6 +1521,8 @@ async function pollStatus() {
     if (res.ok) {
       const d = await res.json();
       document.getElementById('viewer-count').textContent = d.viewers + ' viewers';
+      if (d.streamKey) { STREAM_KEY = d.streamKey; document.getElementById('obsKey').textContent = d.streamKey; }
+      if (d.recording) fetchSetlist();
     }
   } catch {}
 }
