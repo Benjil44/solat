@@ -11,8 +11,9 @@ const fs          = require('fs');
 
 const rateLimit   = require('express-rate-limit');
 const helmet      = require('helmet');
-const authRoutes  = require('./src/auth');
-const adminRoutes = require('./src/admin');
+const authRoutes    = require('./src/auth');
+const adminRoutes   = require('./src/admin');
+const paymentRoutes = require('./src/payment');
 const { verifyToken } = require('./src/users');
 const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce }   = require('./src/chat-ws');
@@ -42,6 +43,9 @@ if (process.env.JWT_SECRET === 'dj-stream-secret-change-me-in-production') {
 const app = express();
 app.set('trust proxy', 1); // trust Cloudflare / reverse proxy for req.ip and req.secure
 
+// Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
+app.use('/payment/webhook', express.raw({ type: 'application/json' }));
+
 // Security headers — CSP disabled until inline scripts are replaced with nonces
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
@@ -68,8 +72,9 @@ app.use('/auth/login',    authLimiter);
 app.use('/auth/register', authLimiter);
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/auth',  authRoutes);
-app.use('/admin', adminRoutes);
+app.use('/auth',    authRoutes);
+app.use('/admin',   adminRoutes);
+app.use('/payment', paymentRoutes);
 
 // ─── Live state ───────────────────────────────────────────────────────────────
 let isLive   = false;

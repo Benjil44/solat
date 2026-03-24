@@ -21,25 +21,28 @@
     .icon { font-size: 4em; margin-bottom: 20px; }
     h1 { font-size: 1.8em; color: #ff4400; margin-bottom: 14px; }
     p { color: #888; line-height: 1.6; margin-bottom: 24px; }
-    a {
+    .btn {
       display: inline-block;
       padding: 14px 28px;
-      background: #ff4400;
-      color: #fff;
       border-radius: 8px;
       text-decoration: none;
       font-weight: bold;
       font-size: 1em;
+      margin: 4px;
     }
-    a:hover { background: #e03d00; }
+    .btn-primary { background: #ff4400; color: #fff; }
+    .btn-primary:hover { background: #e03d00; }
+    .btn-secondary { background: transparent; border: 1px solid #444; color: #aaa; }
+    .btn-secondary:hover { border-color: #ff4400; color: #ff4400; }
   </style>
 </head>
 <body>
   <div class="box">
     <div class="icon">⏰</div>
     <h1>Free Trial Ended</h1>
-    <p>Your 6-month free trial has expired.<br>Contact the DJ to continue watching.</p>
-    <a href="/">Go Back</a>
+    <p>Your 6-month free trial has expired.<br>Subscribe to keep watching.</p>
+    <a class="btn btn-primary" href="/pricing.html">Subscribe Now</a>
+    <a class="btn btn-secondary" href="/">Go Back</a>
   </div>
 </body>
 </html>

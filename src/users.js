@@ -50,6 +50,19 @@ function findUser(username) {
   return users[username] || null;
 }
 
+// Extend (or set) a user's paidUntil by N days from today (or from current expiry if later)
+function extendSubscription(username, days) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  const now         = Date.now();
+  const currentPaid = users[username].paidUntil
+    ? new Date(users[username].paidUntil).getTime() : 0;
+  const base        = Math.max(now, currentPaid);
+  users[username].paidUntil = new Date(base + days * 86400000).toISOString();
+  saveUsers(users);
+  return users[username].paidUntil;
+}
+
 function updatePassword(username, newHashedPassword) {
   const users = loadUsers();
   if (!users[username]) return false;
@@ -95,4 +108,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, updatePassword, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, updatePassword, extendSubscription, createToken, verifyToken, getSubscriptionStatus };

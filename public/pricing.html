@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Live — Subscribe</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0a0a;color:#fff;font-family:Arial,Helvetica,sans-serif;
+      min-height:100vh;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;padding:24px;text-align:center}
+
+    .logo{font-size:1.4em;font-weight:900;color:#ff4400;letter-spacing:3px;margin-bottom:8px}
+    .tagline{color:#555;font-size:.9em;letter-spacing:1px;margin-bottom:40px}
+
+    .card{background:#111;border:1px solid #2a2a2a;border-radius:18px;
+      padding:36px 32px;max-width:360px;width:100%}
+    .plan-name{font-size:.75em;font-weight:bold;letter-spacing:2px;
+      color:#ff4400;text-transform:uppercase;margin-bottom:12px}
+    .price{font-size:3em;font-weight:900;color:#fff;line-height:1}
+    .price-sub{font-size:.85em;color:#555;margin-top:6px;margin-bottom:24px}
+
+    .features{list-style:none;display:flex;flex-direction:column;gap:10px;
+      margin-bottom:28px;text-align:left}
+    .features li{display:flex;align-items:center;gap:10px;font-size:.9em;color:#bbb}
+    .features li::before{content:'✓';color:#44ff88;font-weight:bold;flex-shrink:0}
+
+    .subscribe-btn{width:100%;padding:16px;border:none;border-radius:10px;
+      background:#ff4400;color:#fff;font-size:1.05em;font-weight:bold;
+      letter-spacing:1px;cursor:pointer;transition:.15s;position:relative}
+    .subscribe-btn:hover{background:#e03d00}
+    .subscribe-btn:disabled{opacity:.5;cursor:not-allowed}
+    .subscribe-btn .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);
+      border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;
+      margin:0 auto}
+    .subscribe-btn.loading span{display:none}
+    .subscribe-btn.loading .spinner{display:block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    #err-msg{color:#ff6666;font-size:.84em;min-height:18px;margin-top:10px}
+    #payments-disabled{display:none;background:#1a1a00;border:1px solid #554400;
+      border-radius:8px;padding:14px;color:#aaa;font-size:.85em;line-height:1.6;
+      margin-bottom:20px}
+
+    .back{margin-top:28px;color:#555;font-size:.85em}
+    .back a{color:#ff4400;text-decoration:none}
+    .back a:hover{text-decoration:underline}
+
+    .stripe-badge{margin-top:18px;font-size:.72em;color:#444}
+    .stripe-badge span{color:#555}
+  </style>
+</head>
+<body>
+
+  <div class="logo">DJ LIVE</div>
+  <div class="tagline">EXCLUSIVE STREAM ACCESS</div>
+
+  <div class="card">
+    <div class="plan-name">Membership</div>
+    <div class="price" id="price-display">—</div>
+    <div class="price-sub" id="price-sub">Loading…</div>
+
+    <div id="payments-disabled">
+      Payments are not yet configured.<br>
+      Contact the DJ directly to get access.
+    </div>
+
+    <ul class="features">
+      <li>Unlimited live stream access</li>
+      <li>Full chat participation</li>
+      <li>Instant access after payment</li>
+      <li>Secure checkout via Stripe</li>
+    </ul>
+
+    <button class="subscribe-btn" id="subscribe-btn" onclick="startCheckout()">
+      <span>Subscribe Now</span>
+      <div class="spinner"></div>
+    </button>
+    <div id="err-msg"></div>
+  </div>
+
+  <div class="back"><a href="/">← Back to login</a></div>
+  <div class="stripe-badge">Payments powered by <span>Stripe</span> — we never store card details</div>
+
+<script>
+  async function init() {
+    try {
+      const res = await fetch('/payment/config');
+      const cfg = await res.json();
+      if (!cfg.enabled) {
+        document.getElementById('payments-disabled').style.display = 'block';
+        document.getElementById('subscribe-btn').disabled = true;
+        document.getElementById('price-display').textContent = '—';
+        document.getElementById('price-sub').textContent = 'Contact the DJ for access';
+        return;
+      }
+      document.getElementById('price-sub').textContent =
+        `${cfg.days} days of access · one-time payment`;
+      document.getElementById('price-display').textContent = ''; // Stripe shows price on checkout
+      document.getElementById('price-sub').textContent =
+        `${cfg.days} days of full access`;
+    } catch {
+      document.getElementById('price-sub').textContent = 'Could not load pricing info';
+    }
+
+    // Show success message if returning from Stripe
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('cancelled')) setErr('Payment cancelled — you were not charged.');
+  }
+
+  async function startCheckout() {
+    const btn = document.getElementById('subscribe-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    setErr('');
+
+    try {
+      const res  = await fetch('/payment/create-checkout', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setErr(data.error || 'Could not start checkout'); reset(); return; }
+      window.location.href = data.url;
+    } catch {
+      setErr('Network error — please try again');
+      reset();
+    }
+  }
+
+  function reset() {
+    const btn = document.getElementById('subscribe-btn');
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+
+  function setErr(msg) { document.getElementById('err-msg').textContent = msg; }
+
+  init();
+</script>
+</body>
+</html>
