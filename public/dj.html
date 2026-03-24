@@ -200,6 +200,19 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 @keyframes badge-pop{0%{transform:scale(1.5)}100%{transform:scale(1)}}
 .chat-badge.pop{animation:badge-pop .25s ease-out}
 
+/* ── Cue points ── */
+.cue-row{display:flex;gap:5px;margin-top:2px}
+.cue-btn{
+  flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
+  font-weight:bold;letter-spacing:.5px;transition:.1s;white-space:nowrap;
+  text-align:center;min-width:0}
+.cue-btn:hover{border-color:#666;color:#aaa}
+.cue-btn:active{transform:scale(.93)}
+.cue-btn.set0{border-color:#ffcc00;color:#ffcc00;background:#1a1600}
+.cue-btn.set1{border-color:#00ccff;color:#00ccff;background:#001820}
+.cue-btn.set2{border-color:#44ff88;color:#44ff88;background:#001a0a}
+
 /* ── Effects ── */
 .fx-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
 .fx-btn{padding:4px 10px;background:var(--panel);border:1px solid var(--border);
@@ -468,6 +481,13 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="fx-btn" id="fxLowpassA" onclick="toggleFX('A','lowpass')">Low Pass</button>
       <button class="fx-btn" id="fxReverbA" onclick="toggleFX('A','reverb')">Reverb</button>
     </div>
+
+    <!-- Cue points -->
+    <div class="cue-row">
+      <button class="cue-btn" id="cueA0" onclick="triggerCue('A',0)" oncontextmenu="clearCue(event,'A',0)" title="Click: set/jump · Right-click: clear">CUE 1</button>
+      <button class="cue-btn" id="cueA1" onclick="triggerCue('A',1)" oncontextmenu="clearCue(event,'A',1)" title="Click: set/jump · Right-click: clear">CUE 2</button>
+      <button class="cue-btn" id="cueA2" onclick="triggerCue('A',2)" oncontextmenu="clearCue(event,'A',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
+    </div>
   </div>
 
   <!-- ═══ CENTER COLUMN ═══ -->
@@ -550,6 +570,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <div class="kb-row"><span class="kb-key">B</span><span class="kb-desc">Fade to Deck B</span></div>
         <div class="kb-row"><span class="kb-key">M</span><span class="kb-desc">Toggle monitor mute</span></div>
         <div class="kb-row"><span class="kb-key">R</span><span class="kb-desc">Toggle mix recording</span></div>
+        <div class="kb-row"><span class="kb-key">1 2 3</span><span class="kb-desc">Set / jump to cue on active deck</span></div>
       </div>
     </div>
 
@@ -625,6 +646,13 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="fx-btn" id="fxEchoB" onclick="toggleFX('B','echo')">Echo</button>
       <button class="fx-btn" id="fxLowpassB" onclick="toggleFX('B','lowpass')">Low Pass</button>
       <button class="fx-btn" id="fxReverbB" onclick="toggleFX('B','reverb')">Reverb</button>
+    </div>
+
+    <!-- Cue points -->
+    <div class="cue-row">
+      <button class="cue-btn" id="cueB0" onclick="triggerCue('B',0)" oncontextmenu="clearCue(event,'B',0)" title="Click: set/jump · Right-click: clear">CUE 1</button>
+      <button class="cue-btn" id="cueB1" onclick="triggerCue('B',1)" oncontextmenu="clearCue(event,'B',1)" title="Click: set/jump · Right-click: clear">CUE 2</button>
+      <button class="cue-btn" id="cueB2" onclick="triggerCue('B',2)" oncontextmenu="clearCue(event,'B',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
     </div>
   </div>
 
@@ -784,7 +812,8 @@ function makeDeck() {
     source: null, buffer: null,
     startTime: 0, pauseOffset: 0,
     playing: false, duration: 0,
-    fx: { echo: false, lowpass: false, reverb: false }
+    fx: { echo: false, lowpass: false, reverb: false },
+    cues: [null, null, null]
   };
 }
 
@@ -845,6 +874,7 @@ function decodeFile(file, id) {
       deck.pauseOffset = 0;
       document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
       drawWaveform(buffer, id);
+      resetCues(id);
       setTimeout(() => showBPM(id, detectBPM(buffer)), 0);
       toast('Loaded: ' + file.name.slice(0, 40));
       // If a manual fade was waiting for this deck, trigger it now
@@ -1046,6 +1076,29 @@ function drawWaveformCursor(id, elapsed, duration) {
   ctx.lineTo(x, 9);
   ctx.closePath();
   ctx.fill();
+
+  // Cue point markers — colored vertical lines + bottom triangle
+  const deck = decks[id];
+  for (let i = 0; i < 3; i++) {
+    if (deck.cues[i] === null || !duration) continue;
+    const cx = Math.floor((deck.cues[i] / duration) * w);
+    ctx.strokeStyle = CUE_COLORS[i];
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(cx, 0);
+    ctx.lineTo(cx, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Small upward triangle at bottom
+    ctx.fillStyle = CUE_COLORS[i];
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, h);
+    ctx.lineTo(cx + 4, h);
+    ctx.lineTo(cx, h - 8);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 function seekDeckByClick(e, id) {
@@ -1723,6 +1776,7 @@ function loadPlaylistTrack(idx, deckId) {
   deck.pauseOffset = 0;
   document.getElementById('trackName' + deckId).textContent = t.name;
   drawWaveform(t.buffer, deckId);
+  resetCues(deckId);
   setTimeout(() => showBPM(deckId, detectBPM(t.buffer)), 0);
 }
 
@@ -2089,6 +2143,59 @@ function animateCrossfader(from, to, durationSec, onDone) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  CUE POINTS
+// ═══════════════════════════════════════════════════════════════
+const CUE_COLORS  = ['#ffcc00', '#00ccff', '#44ff88'];
+const CUE_CLASSES = ['set0', 'set1', 'set2'];
+
+function triggerCue(id, idx) {
+  const deck = decks[id];
+  if (!deck.buffer) { toast('Load a track first'); return; }
+
+  if (deck.cues[idx] === null) {
+    // No cue set — mark current playhead position
+    const pos = deck.playing
+      ? Math.max(0, audioCtx.currentTime - deck.startTime)
+      : deck.pauseOffset;
+    deck.cues[idx] = Math.min(deck.duration, pos);
+    updateCueBtn(id, idx);
+    toast(`Cue ${idx + 1} set at ${fmt(deck.cues[idx])}`);
+  } else {
+    // Cue already set — jump to it
+    const pos = deck.cues[idx];
+    deck.pauseOffset = pos;
+    if (deck.playing) playDeck(id, pos);
+  }
+}
+
+function clearCue(e, id, idx) {
+  e.preventDefault();
+  decks[id].cues[idx] = null;
+  updateCueBtn(id, idx);
+  toast(`Cue ${idx + 1} cleared`);
+}
+
+function updateCueBtn(id, idx) {
+  const btn = document.getElementById('cue' + id + idx);
+  if (!btn) return;
+  const pos = decks[id].cues[idx];
+  btn.className = 'cue-btn';
+  if (pos !== null) {
+    btn.classList.add(CUE_CLASSES[idx]);
+    btn.textContent = fmt(pos);
+  } else {
+    btn.textContent = 'CUE ' + (idx + 1);
+  }
+}
+
+function resetCues(id) {
+  decks[id].cues = [null, null, null];
+  updateCueBtn(id, 0);
+  updateCueBtn(id, 1);
+  updateCueBtn(id, 2);
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  BPM DETECTION + TAP TEMPO
 // ═══════════════════════════════════════════════════════════════
 
@@ -2204,6 +2311,13 @@ document.addEventListener('keydown', (e) => {
     case 'r': case 'R':
       if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleMixRecord(); }
       break;
+    case '1': case '2': case '3': {
+      if (e.ctrlKey || e.metaKey) break;
+      e.preventDefault();
+      const activeDeckCue = parseFloat(document.getElementById('crossfader').value) < 0.5 ? 'A' : 'B';
+      triggerCue(activeDeckCue, parseInt(e.key) - 1);
+      break;
+    }
   }
 });
 
