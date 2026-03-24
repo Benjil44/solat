@@ -41,6 +41,22 @@
     .logout-btn { background:transparent; border:1px solid #444; color:#aaa;
       padding:4px 10px; border-radius:6px; cursor:pointer; font-size:.82em; }
     .logout-btn:hover { border-color:var(--accent); color:var(--accent); }
+    /* change-password modal */
+    #pwd-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.8);
+      z-index:200; align-items:center; justify-content:center; }
+    #pwd-modal.show { display:flex; }
+    #pwd-box { background:#111; border:1px solid #333; border-radius:12px;
+      padding:28px 24px; width:100%; max-width:340px; display:flex; flex-direction:column; gap:14px; }
+    #pwd-box h3 { color:#fff; font-size:1em; letter-spacing:1px; }
+    #pwd-box input { width:100%; padding:10px 14px; background:#0a0a0a; border:1px solid #333;
+      border-radius:7px; color:#fff; font-size:.9em; outline:none; }
+    #pwd-box input:focus { border-color:var(--accent); }
+    #pwd-box .row { display:flex; gap:8px; }
+    #pwd-box button { flex:1; padding:10px; border:none; border-radius:7px;
+      cursor:pointer; font-size:.88em; font-weight:bold; }
+    #pwd-save { background:var(--accent); color:#fff; }
+    #pwd-cancel { background:#222; color:#aaa; border:1px solid #333; }
+    #pwd-msg { font-size:.82em; min-height:18px; text-align:center; }
 
     /* ── Main area ── */
     #main { flex:1; display:flex; overflow:hidden; }
@@ -178,6 +194,21 @@
 </head>
 <body>
 
+  <!-- Change password modal -->
+  <div id="pwd-modal">
+    <div id="pwd-box">
+      <h3>🔑 CHANGE PASSWORD</h3>
+      <input type="password" id="pwd-current" placeholder="Current password" autocomplete="current-password">
+      <input type="password" id="pwd-new" placeholder="New password (min 6 chars)" autocomplete="new-password">
+      <input type="password" id="pwd-confirm" placeholder="Confirm new password" autocomplete="new-password">
+      <div id="pwd-msg"></div>
+      <div class="row">
+        <button id="pwd-cancel" onclick="hidChangePwd()">Cancel</button>
+        <button id="pwd-save" onclick="doChangePassword()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="buf-bar"></div>
 
   <!-- Top bar -->
@@ -190,6 +221,7 @@
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
+      <button class="logout-btn" onclick="showChangePwd()">🔑</button>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
   </div>
@@ -542,6 +574,42 @@
       chatOpen = !chatOpen;
       document.getElementById('chat-panel').classList.toggle('open', chatOpen);
       document.getElementById('chat-toggle-btn').classList.toggle('active', chatOpen);
+    }
+
+    function showChangePwd() {
+      document.getElementById('pwd-current').value = '';
+      document.getElementById('pwd-new').value = '';
+      document.getElementById('pwd-confirm').value = '';
+      document.getElementById('pwd-msg').textContent = '';
+      document.getElementById('pwd-modal').classList.add('show');
+    }
+    function hidChangePwd() { document.getElementById('pwd-modal').classList.remove('show'); }
+
+    async function doChangePassword() {
+      const cur  = document.getElementById('pwd-current').value;
+      const nw   = document.getElementById('pwd-new').value;
+      const conf = document.getElementById('pwd-confirm').value;
+      const msg  = document.getElementById('pwd-msg');
+      if (!cur || !nw) return (msg.style.color='#f66', msg.textContent='Fill in all fields');
+      if (nw !== conf) return (msg.style.color='#f66', msg.textContent='Passwords do not match');
+      if (nw.length < 6) return (msg.style.color='#f66', msg.textContent='Min 6 characters');
+      const btn = document.getElementById('pwd-save');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword: cur, newPassword: nw })
+        });
+        const d = await res.json();
+        if (res.ok) {
+          msg.style.color = '#4f4'; msg.textContent = 'Password changed!';
+          setTimeout(hidChangePwd, 1200);
+        } else {
+          msg.style.color = '#f66'; msg.textContent = d.error || 'Failed';
+        }
+      } catch { msg.style.color='#f66'; msg.textContent='Network error'; }
+      btn.disabled = false;
     }
 
     async function doLogout() {

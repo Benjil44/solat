@@ -47,6 +47,14 @@ function findUser(username) {
   return users[username] || null;
 }
 
+function updatePassword(username, newHashedPassword) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].password = newHashedPassword;
+  saveUsers(users);
+  return true;
+}
+
 function getSubscriptionStatus(user) {
   const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
   const registered = new Date(user.registeredAt).getTime();
@@ -68,11 +76,11 @@ function getSubscriptionStatus(user) {
 }
 
 // ─── JWT ──────────────────────────────────────────────────────────────────────
-function createToken(user) {
+function createToken(user, rememberMe = false) {
   return jwt.sign(
     { id: user.id, username: user.username, registeredAt: user.registeredAt, paidUntil: user.paidUntil },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: rememberMe ? '30d' : '7d' }
   );
 }
 
@@ -84,4 +92,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, updatePassword, createToken, verifyToken, getSubscriptionStatus };

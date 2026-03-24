@@ -214,6 +214,18 @@ nms.on('donePublish', () => {
 
 nms.run();
 
+// ─── 404 + Error handlers ─────────────────────────────────────────────────────
+app.use((req, res) => {
+  if (req.accepts('html')) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.status(404).json({ error: 'Not found' });
+});
+
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', err.stack || err.message);
+  if (req.accepts('html')) return res.status(500).send('<h1 style="font-family:sans-serif;color:#ff4400">500 — Server Error</h1>');
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(HTTP_PORT, () => {
   console.log('');

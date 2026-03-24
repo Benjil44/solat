@@ -1,11 +1,28 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const router = express.Router();
+const express   = require('express');
+const bcrypt    = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const router    = express.Router();
 
-const { createUser, findUser, createToken, getSubscriptionStatus } = require('./users');
+const { createUser, findUser, updatePassword, createToken, getSubscriptionStatus } = require('./users');
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Too many login attempts — try again in 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: { error: 'Too many accounts created from this IP — try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // POST /auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -41,8 +58,8 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+router.post('/login', loginLimiter, async (req, res) => {
+  const { username, password, rememberMe } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -58,11 +75,38 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
-  const sub = getSubscriptionStatus(user);
-  const token = createToken(user);
+  const sub    = getSubscriptionStatus(user);
+  const remember = !!rememberMe;
+  const token  = createToken(user, remember);
+  const maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
   const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-  res.cookie('token', token, { httpOnly: true, secure, sameSite: secure ? 'strict' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie('token', token, { httpOnly: true, secure, sameSite: secure ? 'strict' : 'lax', maxAge });
   res.json({ success: true, username: user.username, subscription: sub });
+});
+
+// POST /auth/change-password
+router.post('/change-password', async (req, res) => {
+  const { verifyToken } = require('./users');
+  const token = req.cookies.token || req.headers['x-token'];
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: 'Invalid session' });
+
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword)
+    return res.status(400).json({ error: 'Current and new password are required' });
+  if (newPassword.length < 6)
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+  const user = findUser(payload.username);
+  if (!user) return res.status(401).json({ error: 'User not found' });
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  updatePassword(payload.username, hashed);
+  res.json({ success: true });
 });
 
 // POST /auth/logout
