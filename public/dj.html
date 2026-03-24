@@ -206,6 +206,16 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color:var(--muted);border-radius:5px;cursor:pointer;font-size:.75em}
 .fx-btn.active{background:#1a0800;border-color:var(--yellow);color:var(--yellow)}
 
+/* Record mix button */
+.record-btn{width:100%;padding:10px;border:1px solid #333;border-radius:8px;
+  background:var(--panel);color:#aaa;cursor:pointer;font-size:.88em;font-weight:bold;
+  letter-spacing:1px;transition:.15s;margin-top:4px}
+.record-btn:hover{border-color:#ff4444;color:#ff4444}
+.record-btn.rec{background:#220000;border-color:#ff4444;color:#ff4444;
+  animation:pulse-border 1.2s infinite}
+.rec-timer{font-size:.78em;color:#ff4444;text-align:center;min-height:16px;
+  letter-spacing:1px;margin-top:2px}
+
 /* Toast */
 #toast{position:fixed;bottom:20px;right:20px;background:#222;border:1px solid var(--accent);
   color:#fff;padding:10px 18px;border-radius:8px;font-size:.85em;display:none;z-index:999}
@@ -456,6 +466,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
         ● GO LIVE
       </button>
+      <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
+      <div class="rec-timer" id="recTimer"></div>
     </div>
 
   </div>
@@ -1289,6 +1301,70 @@ function sendChat() {
   if (!text || !wsChat || wsChat.readyState !== WebSocket.OPEN) return;
   wsChat.send(JSON.stringify({ type: 'chat', text }));
   input.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MIX RECORDER (local download)
+// ═══════════════════════════════════════════════════════════════
+let mixRecorder   = null;
+let mixChunks     = [];
+let mixTimerInt   = null;
+let mixStartTime  = 0;
+
+function toggleMixRecord() {
+  if (mixRecorder && mixRecorder.state === 'recording') {
+    stopMixRecord();
+  } else {
+    startMixRecord();
+  }
+}
+
+function startMixRecord() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(m => MediaRecorder.isTypeSupported(m)) || 'audio/webm';
+  mixChunks = [];
+  mixRecorder = new MediaRecorder(broadcastDest.stream, { mimeType, audioBitsPerSecond: 192000 });
+  mixRecorder.ondataavailable = e => { if (e.data.size > 0) mixChunks.push(e.data); };
+  mixRecorder.onstop = saveMixFile;
+  mixRecorder.start(1000);
+  mixStartTime = Date.now();
+  document.getElementById('recordBtn').classList.add('rec');
+  document.getElementById('recordBtn').textContent = '⏹ Stop Recording';
+  mixTimerInt = setInterval(updateRecTimer, 1000);
+  updateRecTimer();
+  toast('Recording started');
+}
+
+function stopMixRecord() {
+  if (mixRecorder && mixRecorder.state !== 'inactive') mixRecorder.stop();
+  clearInterval(mixTimerInt);
+  document.getElementById('recordBtn').classList.remove('rec');
+  document.getElementById('recordBtn').textContent = '⏺ Record Mix';
+  document.getElementById('recTimer').textContent = '';
+}
+
+function updateRecTimer() {
+  const s = Math.floor((Date.now() - mixStartTime) / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  document.getElementById('recTimer').textContent =
+    (h ? h + ':' : '') + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0') + ' REC';
+}
+
+function saveMixFile() {
+  if (!mixChunks.length) return;
+  const blob = new Blob(mixChunks, { type: mixChunks[0].type || 'audio/webm' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const now  = new Date();
+  const stamp = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0') + '_' +
+    String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+  a.href     = url;
+  a.download = `mix_${stamp}.webm`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Mix saved: mix_' + stamp + '.webm');
 }
 
 function esc(s) {

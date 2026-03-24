@@ -63,6 +63,15 @@ setInterval(() => {
 }, 10_000);
 
 // ─── Public APIs ──────────────────────────────────────────────────────────────
+// No-auth live check — safe to expose (no stream key or user data)
+app.get('/api/live', (req, res) => {
+  res.json({
+    live:    isLive || isBrowserLive(),
+    viewers: viewers.size,
+    title:   getStreamTitle(),
+  });
+});
+
 app.get('/api/status', requireAuth, (req, res) => {
   res.json({
     live:      isLive || isBrowserLive(),
