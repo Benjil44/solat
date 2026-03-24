@@ -156,9 +156,12 @@ function stopFFmpeg() {
   }
 }
 
+// Called by server graceful-shutdown — stops FFmpeg cleanly before process exits
+function stopFFmpegOnExit() { stopFFmpeg(); }
+
 module.exports = {
   setupStreamWS, getStreamTitle, setStreamTitle,
   isDJConnected, isBrowserLive,
   getCurrentRecording, getSessionStartTime,
-  getSetlist, clearSetlist,
+  getSetlist, clearSetlist, stopFFmpegOnExit,
 };

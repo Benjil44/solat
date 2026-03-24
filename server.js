@@ -10,10 +10,11 @@ const path        = require('path');
 const fs          = require('fs');
 
 const rateLimit   = require('express-rate-limit');
+const helmet      = require('helmet');
 const authRoutes  = require('./src/auth');
 const adminRoutes = require('./src/admin');
 const { verifyToken } = require('./src/users');
-const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist } = require('./src/stream-ws');
+const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce }   = require('./src/chat-ws');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -22,11 +23,35 @@ const RTMP_PORT  = 1935;
 const STREAM_KEY = process.env.STREAM_KEY || 'djlive';
 const HLS_PATH   = path.join(__dirname, 'media');
 
+// ─── Startup env validation ───────────────────────────────────────────────────
+const REQUIRED_ENV  = ['JWT_SECRET', 'ADMIN_KEY', 'STREAM_KEY'];
+const missingEnv    = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length) {
+  console.error('\n[FATAL] Missing required environment variables:', missingEnv.join(', '));
+  console.error('[FATAL] Set them in your .env file — server will not start.\n');
+  process.exit(1);
+}
+if (process.env.JWT_SECRET === 'dj-stream-secret-change-me-in-production') {
+  const suggest = require('crypto').randomBytes(32).toString('hex');
+  console.error('\n[FATAL] JWT_SECRET is using the default insecure value.');
+  console.error('[FATAL] Add this to your .env:  JWT_SECRET=' + suggest + '\n');
+  process.exit(1);
+}
+
 // ─── Express ──────────────────────────────────────────────────────────────────
 const app = express();
 app.set('trust proxy', 1); // trust Cloudflare / reverse proxy for req.ip and req.secure
 
-app.use(cors());
+// Security headers — CSP disabled until inline scripts are replaced with nonces
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// CORS — only allow configured origin; blocks all cross-origin if ALLOWED_ORIGIN is unset
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN;
+app.use(cors(ALLOWED_ORIGIN
+  ? { origin: ALLOWED_ORIGIN, credentials: true }
+  : { origin: false }
+));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -53,7 +78,8 @@ let coverUrl = '';
 // Viewer heartbeat map: username → timestamp
 const viewers = new Map();
 
-app.post('/api/heartbeat', requireAuth, (req, res) => {
+const heartbeatLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
+app.post('/api/heartbeat', heartbeatLimiter, requireAuth, (req, res) => {
   viewers.set(req.user.username, Date.now());
   res.json({ ok: true });
 });
@@ -214,6 +240,7 @@ const nmsConfig = {
   },
   http: {
     port:        8888,
+    host:        '127.0.0.1',   // bind to localhost only — raw HLS not exposed publicly
     mediaroot:   HLS_PATH,
     allow_origin: '*'
   },
@@ -289,6 +316,20 @@ function backupUsers() {
 
 backupUsers();                              // run on startup
 setInterval(backupUsers, 24 * 60 * 60 * 1000); // then every 24h
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+function shutdown(signal) {
+  console.log(`\n[SHUTDOWN] ${signal} — stopping server gracefully...`);
+  stopFFmpegOnExit();     // end any live FFmpeg / recording session cleanly
+  server.close(() => {
+    console.log('[SHUTDOWN] HTTP server closed.');
+    process.exit(0);
+  });
+  // Force-exit if still running after 8 s (e.g. hung WebSocket connections)
+  setTimeout(() => { console.error('[SHUTDOWN] Forced exit after timeout'); process.exit(1); }, 8000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(HTTP_PORT, () => {

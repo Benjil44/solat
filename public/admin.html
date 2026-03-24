@@ -174,6 +174,68 @@
     }
 
     .empty { color: #555; padding: 20px 0; text-align: center; }
+
+    /* ── Recordings ── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 20px 0 12px;
+    }
+    .section-header .section-title { margin: 0; }
+
+    .btn-sm {
+      padding: 5px 14px; background: transparent;
+      border: 1px solid #444; color: #aaa;
+      border-radius: 6px; cursor: pointer; font-size: 0.82em;
+    }
+    .btn-sm:hover { border-color: #ff4400; color: #ff4400; }
+
+    .rec-player-wrap {
+      background: #141414; border: 1px solid #2a2a2a;
+      border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;
+    }
+    .rec-playing-name {
+      color: #888; font-size: 0.82em; margin-bottom: 10px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    audio { width: 100%; accent-color: #ff4400; }
+
+    .rec-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px; border-bottom: 1px solid #1e1e1e;
+      transition: background .12s;
+    }
+    .rec-card:hover { background: #161616; }
+    .rec-card:last-child { border-bottom: none; }
+
+    .rec-info { flex: 1; min-width: 0; }
+    .rec-name {
+      display: block; font-size: 0.88em; color: #ddd;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rec-meta { font-size: 0.76em; color: #555; margin-top: 2px; display: block; }
+
+    .rec-actions { display: flex; gap: 7px; flex-shrink: 0; }
+
+    .btn-play {
+      padding: 5px 12px; background: #1a0800;
+      border: 1px solid #ff4400; color: #ff6622;
+      border-radius: 6px; cursor: pointer; font-size: 0.8em;
+    }
+    .btn-play:hover { background: #2a1000; }
+    .btn-play.active { background: #ff4400; color: #fff; }
+
+    .btn-dl {
+      padding: 5px 12px; background: #001a0a;
+      border: 1px solid #44ff88; color: #44ff88;
+      border-radius: 6px; cursor: pointer; font-size: 0.8em;
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    .btn-dl:hover { background: #002a12; }
+
+    #rec-list {
+      background: #111; border: 1px solid #222;
+      border-radius: 10px; overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -236,6 +298,21 @@
     </div>
   </div>
 
+  <!-- Recordings -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Recordings</div>
+      <button class="btn-sm" onclick="loadRecordings()">⟳ Refresh</button>
+    </div>
+
+    <div class="rec-player-wrap" id="rec-player-wrap" style="display:none">
+      <div class="rec-playing-name" id="rec-playing-name"></div>
+      <audio id="rec-audio" controls preload="metadata"></audio>
+    </div>
+
+    <div id="rec-list"><div class="empty">Loading...</div></div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
@@ -243,9 +320,10 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadRecordings()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
+      setInterval(loadRecordings, 60000); // refresh recording list every minute
     }
 
     // ── Stream status ─────────────────────────────────────────────────────────
@@ -353,6 +431,77 @@
     async function adminLogout() {
       await fetch('/admin/logout', { method: 'POST' });
       window.location.href = '/admin-login.html';
+    }
+
+    // ── Recordings ────────────────────────────────────────────────────────────
+    let currentRecName = null;
+
+    async function loadRecordings() {
+      try {
+        const res = await fetch('/api/admin/recordings');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const { recordings } = await res.json();
+        renderRecordings(recordings);
+      } catch { document.getElementById('rec-list').innerHTML = '<div class="empty">Failed to load recordings</div>'; }
+    }
+
+    function renderRecordings(recordings) {
+      const el = document.getElementById('rec-list');
+      if (!recordings.length) {
+        el.innerHTML = '<div class="empty">No recordings yet — start a browser stream to record</div>';
+        return;
+      }
+      el.innerHTML = recordings.map(r => `
+        <div class="rec-card" id="rec-card-${esc(r.name)}">
+          <div class="rec-info">
+            <span class="rec-name" title="${esc(r.name)}">${esc(r.name)}</span>
+            <span class="rec-meta">${fmtDate(r.date)} &nbsp;·&nbsp; ${fmtSize(r.size)}</span>
+          </div>
+          <div class="rec-actions">
+            <button class="btn-play" id="rec-btn-${esc(r.name)}" onclick="playRecording('${esc(r.name)}')">▶ Play</button>
+            <a class="btn-dl" href="/api/admin/recordings/${encodeURIComponent(r.name)}" download="${esc(r.name)}">⬇ Download</a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function playRecording(name) {
+      const audio = document.getElementById('rec-audio');
+      const wrap  = document.getElementById('rec-player-wrap');
+      const label = document.getElementById('rec-playing-name');
+
+      // Deactivate previous play button
+      if (currentRecName) {
+        const prev = document.getElementById('rec-btn-' + currentRecName);
+        if (prev) { prev.classList.remove('active'); prev.textContent = '▶ Play'; }
+      }
+
+      if (currentRecName === name && !audio.paused) {
+        audio.pause();
+        currentRecName = null;
+        return;
+      }
+
+      currentRecName = name;
+      audio.src = '/api/admin/recordings/' + encodeURIComponent(name);
+      label.textContent = '▶ Now playing: ' + name;
+      wrap.style.display = 'block';
+      audio.play().catch(() => {});
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      const btn = document.getElementById('rec-btn-' + name);
+      if (btn) { btn.classList.add('active'); btn.textContent = '⏸ Pause'; }
+
+      audio.onended = () => {
+        if (btn) { btn.classList.remove('active'); btn.textContent = '▶ Play'; }
+        currentRecName = null;
+      };
+    }
+
+    function fmtSize(bytes) {
+      if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+      if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+      return Math.round(bytes / 1e3) + ' KB';
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

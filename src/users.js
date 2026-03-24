@@ -17,7 +17,10 @@ function loadUsers() {
 }
 
 function saveUsers(users) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(users, null, 2), 'utf8');
+  // Write to a temp file then atomically rename — prevents corruption on crash mid-write
+  const tmp = DB_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(users, null, 2), 'utf8');
+  fs.renameSync(tmp, DB_PATH);
 }
 
 // ─── User operations ──────────────────────────────────────────────────────────

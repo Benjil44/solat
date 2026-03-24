@@ -167,6 +167,24 @@
       color:#fff; border-radius:6px; cursor:pointer; font-size:.8em; font-weight:bold; }
     .chat-send-btn:hover { background:#e03d00; }
 
+    /* ── Trial expiry banner ── */
+    #expiry-banner {
+      background: linear-gradient(90deg,#2a1400,#1a0d00);
+      border-bottom: 1px solid #ff6600;
+      padding: 8px 16px; display: none; align-items: center;
+      gap: 10px; font-size: 0.82em; flex-shrink: 0; z-index: 9;
+    }
+    #expiry-banner.show { display: flex; }
+    #expiry-text { flex: 1; color: #ffaa44; line-height: 1.4; }
+    #expiry-text strong { color: #ffcc00; }
+    #expiry-text a { color: #ff6622; text-decoration: underline; cursor: pointer; }
+    .expiry-dismiss {
+      background: transparent; border: 1px solid #994400; color: #ff6600;
+      padding: 3px 10px; border-radius: 5px; cursor: pointer;
+      font-size: 0.85em; white-space: nowrap; flex-shrink: 0;
+    }
+    .expiry-dismiss:hover { background: #2a1000; border-color: #ff6600; }
+
     /* ─── Responsive ──────────────────────────────────────────── */
 
     /* Tablet: shrink chat panel */
@@ -224,6 +242,13 @@
       <button class="logout-btn" onclick="showChangePwd()">🔑</button>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
+  </div>
+
+  <!-- Trial expiry warning -->
+  <div id="expiry-banner">
+    <span>⚠</span>
+    <span id="expiry-text"></span>
+    <button class="expiry-dismiss" onclick="dismissExpiryBanner()">✕ Dismiss</button>
   </div>
 
   <!-- Main -->
@@ -304,9 +329,29 @@
       if (data.subscription.type === 'trial') {
         badge.textContent = `FREE − ${data.subscription.daysLeft}d`;
         badge.className = 'badge-trial';
+        // Show expiry warning banner when ≤ 14 days remain
+        if (data.subscription.daysLeft <= 14 && !sessionStorage.getItem('expiryDismissed')) {
+          const d   = data.subscription.daysLeft;
+          const txt = document.getElementById('expiry-text');
+          txt.innerHTML = d <= 0
+            ? '<strong>Your free trial has expired.</strong> Contact the DJ to keep your access.'
+            : d === 1
+              ? '<strong>Your free trial expires today!</strong> Contact the DJ to keep your access.'
+              : `<strong>Your free trial expires in ${d} days.</strong> Contact the DJ to keep your access.`;
+          document.getElementById('expiry-banner').classList.add('show');
+        }
       } else if (data.subscription.type === 'paid') {
         badge.textContent = `MEMBER − ${data.subscription.daysLeft}d`;
         badge.className = 'badge-paid';
+        // Warn 7 days before paid subscription ends
+        if (data.subscription.daysLeft <= 7 && !sessionStorage.getItem('expiryDismissed')) {
+          const d = data.subscription.daysLeft;
+          const txt = document.getElementById('expiry-text');
+          txt.innerHTML = d <= 1
+            ? '<strong>Your subscription expires today!</strong> Contact the DJ to renew.'
+            : `<strong>Your subscription expires in ${d} days.</strong> Contact the DJ to renew.`;
+          document.getElementById('expiry-banner').classList.add('show');
+        }
       } else {
         badge.textContent = 'EXPIRED';
         badge.className = 'badge-expired';
@@ -574,6 +619,11 @@
       chatOpen = !chatOpen;
       document.getElementById('chat-panel').classList.toggle('open', chatOpen);
       document.getElementById('chat-toggle-btn').classList.toggle('active', chatOpen);
+    }
+
+    function dismissExpiryBanner() {
+      document.getElementById('expiry-banner').classList.remove('show');
+      sessionStorage.setItem('expiryDismissed', '1');
     }
 
     function showChangePwd() {

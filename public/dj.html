@@ -223,6 +223,16 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color:#888;border-radius:7px;cursor:pointer;font-size:.78em;margin-top:4px}
 .obs-toggle:hover{border-color:#4488ff;color:#4488ff}
 
+/* Keyboard shortcuts panel */
+.kb-panel{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;display:none;flex-direction:column;gap:6px;margin-top:4px}
+.kb-panel.show{display:flex}
+.kb-row{display:flex;align-items:center;gap:8px;font-size:.76em}
+.kb-key{background:#1a1a1a;border:1px solid #3a3a3a;border-radius:4px;
+  padding:2px 8px;font-family:monospace;color:#ddd;font-size:.95em;
+  min-width:20px;text-align:center;flex-shrink:0}
+.kb-desc{color:var(--muted)}
+
 /* Setlist panel */
 .setlist-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:14px;margin:0 10px 10px;display:flex;flex-direction:column;gap:8px}
@@ -238,6 +248,15 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   background:#0d0d0d;border-radius:5px;font-size:.8em}
 .setlist-time{color:var(--muted);font-size:.75em;min-width:46px;flex-shrink:0}
 .setlist-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
+
+/* BPM display */
+.bpm-row{display:flex;align-items:center;gap:8px;font-size:.8em}
+.bpm-lbl{color:var(--muted);font-size:.75em;text-transform:uppercase;letter-spacing:1px}
+.bpm-val{color:var(--yellow);font-weight:bold;min-width:38px}
+.tap-btn{padding:3px 10px;background:var(--panel);border:1px solid var(--border);
+  color:#aaa;border-radius:5px;cursor:pointer;font-size:.78em;letter-spacing:1px;transition:.1s}
+.tap-btn:hover{border-color:var(--yellow);color:var(--yellow)}
+.tap-btn:active{background:#1a1600;border-color:var(--yellow);transform:scale(.94)}
 
 /* Record mix button */
 .record-btn{width:100%;padding:10px;border:1px solid #333;border-radius:8px;
@@ -381,6 +400,11 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="hint">Click or drag a music file here</div>
     </div>
     <div class="track-name" id="trackNameA">No track loaded</div>
+    <div class="bpm-row">
+      <span class="bpm-lbl">BPM</span>
+      <span class="bpm-val" id="bpmA">—</span>
+      <button class="tap-btn" onclick="tapTempo('A')">TAP</button>
+    </div>
 
     <!-- Waveform -->
     <div class="waveform-wrap" onclick="seekDeckByClick(event,'A')">
@@ -516,6 +540,17 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
           <button class="obs-copy" onclick="copyOBS('key')">Copy</button>
         </div>
       </div>
+
+      <!-- Keyboard Shortcuts -->
+      <button class="obs-toggle" onclick="toggleKBPanel()">⌨ Keyboard Shortcuts</button>
+      <div class="kb-panel" id="kbPanel">
+        <div class="kb-row"><span class="kb-key">Space</span><span class="kb-desc">Play / Pause active deck</span></div>
+        <div class="kb-row"><span class="kb-key">← →</span><span class="kb-desc">Nudge crossfader (5%)</span></div>
+        <div class="kb-row"><span class="kb-key">A</span><span class="kb-desc">Fade to Deck A</span></div>
+        <div class="kb-row"><span class="kb-key">B</span><span class="kb-desc">Fade to Deck B</span></div>
+        <div class="kb-row"><span class="kb-key">M</span><span class="kb-desc">Toggle monitor mute</span></div>
+        <div class="kb-row"><span class="kb-key">R</span><span class="kb-desc">Toggle mix recording</span></div>
+      </div>
     </div>
 
   </div>
@@ -530,6 +565,11 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="hint">Click or drag a music file here</div>
     </div>
     <div class="track-name" id="trackNameB">No track loaded</div>
+    <div class="bpm-row">
+      <span class="bpm-lbl">BPM</span>
+      <span class="bpm-val" id="bpmB">—</span>
+      <button class="tap-btn" onclick="tapTempo('B')">TAP</button>
+    </div>
 
     <div class="waveform-wrap" onclick="seekDeckByClick(event,'B')">
       <canvas class="waveform" id="waveformB" height="60"></canvas>
@@ -805,6 +845,7 @@ function decodeFile(file, id) {
       deck.pauseOffset = 0;
       document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
       drawWaveform(buffer, id);
+      setTimeout(() => showBPM(id, detectBPM(buffer)), 0);
       toast('Loaded: ' + file.name.slice(0, 40));
       // If a manual fade was waiting for this deck, trigger it now
       if (pendingFadeTo !== null && (pendingFadeTo === 1 ? 'B' : 'A') === id) {
@@ -1682,6 +1723,7 @@ function loadPlaylistTrack(idx, deckId) {
   deck.pauseOffset = 0;
   document.getElementById('trackName' + deckId).textContent = t.name;
   drawWaveform(t.buffer, deckId);
+  setTimeout(() => showBPM(deckId, detectBPM(t.buffer)), 0);
 }
 
 function plItemDblClick(e, idx) {
@@ -2044,6 +2086,129 @@ function animateCrossfader(from, to, durationSec, onDone) {
     if (t < 1) requestAnimationFrame(step);
     else if (onDone) onDone();
   })(startMs);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BPM DETECTION + TAP TEMPO
+// ═══════════════════════════════════════════════════════════════
+
+// Detect BPM from an AudioBuffer using energy-envelope autocorrelation.
+// Runs at 200 Hz effective rate so it's fast even for long tracks.
+function detectBPM(buffer) {
+  const data       = buffer.getChannelData(0);
+  const sr         = buffer.sampleRate;
+  const envRate    = 200;                      // envelope sample rate (Hz)
+  const hop        = Math.floor(sr / envRate); // samples per envelope frame
+  const nFrames    = Math.floor(data.length / hop);
+
+  // RMS energy per hop
+  const energy = new Float32Array(nFrames);
+  for (let i = 0; i < nFrames; i++) {
+    let sum = 0;
+    const base = i * hop;
+    for (let j = 0; j < hop; j++) { const s = data[base + j] || 0; sum += s * s; }
+    energy[i] = Math.sqrt(sum / hop);
+  }
+
+  // Half-wave rectified first difference = onset strength
+  const onset = new Float32Array(nFrames);
+  for (let i = 1; i < nFrames; i++) onset[i] = Math.max(0, energy[i] - energy[i - 1]);
+
+  // Autocorrelation over BPM range 55–185
+  const minLag = Math.floor(envRate * 60 / 185); // ~65 frames
+  const maxLag = Math.ceil(envRate  * 60 / 55);  // ~218 frames
+  const n      = nFrames - maxLag;
+  if (n < 100) return null; // track too short
+
+  let bestLag = minLag, bestCorr = -1;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let c = 0;
+    for (let i = 0; i < n; i++) c += onset[i] * onset[i + lag];
+    c /= n;
+    if (c > bestCorr) { bestCorr = c; bestLag = lag; }
+  }
+
+  const rawBPM = envRate * 60 / bestLag;
+
+  // Snap to nearest musically sensible value (multiples / halves within 4%)
+  const candidates = [rawBPM / 2, rawBPM, rawBPM * 2].filter(b => b >= 55 && b <= 185);
+  // Pick the one closest to 120 (most common dance BPM)
+  candidates.sort((a, b) => Math.abs(a - 120) - Math.abs(b - 120));
+  return Math.round(candidates[0]);
+}
+
+function showBPM(id, bpm) {
+  document.getElementById('bpm' + id).textContent = bpm != null ? bpm + ' BPM' : '—';
+}
+
+// Tap tempo
+const tapState = { A: [], B: [] };
+
+function tapTempo(id) {
+  const now  = Date.now();
+  const taps = tapState[id];
+  // Reset if last tap was > 3 s ago
+  if (taps.length && now - taps[taps.length - 1] > 3000) taps.length = 0;
+  taps.push(now);
+  if (taps.length < 2) { showBPM(id, '?'); return; }
+  // Keep last 8 taps max
+  if (taps.length > 8) taps.splice(0, taps.length - 8);
+  const intervals = [];
+  for (let i = 1; i < taps.length; i++) intervals.push(taps[i] - taps[i - 1]);
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  showBPM(id, Math.round(60000 / avg));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+  // Never fire when user is typing in an input / textarea / select
+  const tag = document.activeElement ? document.activeElement.tagName : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const cf = document.getElementById('crossfader');
+
+  switch (e.key) {
+    case ' ':
+    case 'Spacebar': {
+      e.preventDefault();
+      // Active deck = whichever side the crossfader currently points to
+      const activeDeck = parseFloat(cf.value) < 0.5 ? 'A' : 'B';
+      togglePlay(activeDeck);
+      break;
+    }
+    case 'ArrowLeft': {
+      e.preventDefault();
+      const val = Math.max(0, Math.round((parseFloat(cf.value) - 0.05) * 100) / 100);
+      cf.value = val;
+      userMovedCrossfader(val);
+      break;
+    }
+    case 'ArrowRight': {
+      e.preventDefault();
+      const val = Math.min(1, Math.round((parseFloat(cf.value) + 0.05) * 100) / 100);
+      cf.value = val;
+      userMovedCrossfader(val);
+      break;
+    }
+    case 'a': case 'A':
+      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); manualFade(0); }
+      break;
+    case 'b': case 'B':
+      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); manualFade(1); }
+      break;
+    case 'm': case 'M':
+      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleMonitorMute(); }
+      break;
+    case 'r': case 'R':
+      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleMixRecord(); }
+      break;
+  }
+});
+
+function toggleKBPanel() {
+  document.getElementById('kbPanel').classList.toggle('show');
 }
 
 // ═══════════════════════════════════════════════════════════════
