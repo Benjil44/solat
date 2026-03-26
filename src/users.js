@@ -6,13 +6,19 @@ const { v4: uuidv4 } = require('uuid');
 const DB_PATH = path.join(__dirname, '../data/users.json');
 const JWT_SECRET = process.env.JWT_SECRET || 'dj-stream-secret-change-me-in-production';
 
-// ─── Database helpers ─────────────────────────────────────────────────────────
+// ─── In-memory cache ──────────────────────────────────────────────────────────
+// Avoids repeated disk reads on every auth check / heartbeat.
+// Invalidated on every write so it's always consistent.
+let _cache = null;
+
 function loadUsers() {
-  if (!fs.existsSync(DB_PATH)) return {};
+  if (_cache) return _cache;
+  if (!fs.existsSync(DB_PATH)) return (_cache = {});
   try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    _cache = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    return _cache;
   } catch {
-    return {};
+    return (_cache = {});
   }
 }
 
@@ -21,6 +27,7 @@ function saveUsers(users) {
   const tmp = DB_PATH + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(users, null, 2), 'utf8');
   fs.renameSync(tmp, DB_PATH);
+  _cache = users;   // update cache in-place after successful write
 }
 
 // ─── User operations ──────────────────────────────────────────────────────────
@@ -50,6 +57,14 @@ function findUser(username) {
   return users[username] || null;
 }
 
+function deleteUser(username) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  delete users[username];
+  saveUsers(users);
+  return true;
+}
+
 // Extend (or set) a user's paidUntil by N days from today (or from current expiry if later)
 function extendSubscription(username, days) {
   const users = loadUsers();
@@ -67,6 +82,22 @@ function updatePassword(username, newHashedPassword) {
   const users = loadUsers();
   if (!users[username]) return false;
   users[username].password = newHashedPassword;
+  saveUsers(users);
+  return true;
+}
+
+function setSuspended(username, suspended) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].suspended = !!suspended;
+  saveUsers(users);
+  return true;
+}
+
+function setChatBan(username, banned) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].chatBanned = !!banned;
   saveUsers(users);
   return true;
 }
@@ -108,4 +139,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, updatePassword, extendSubscription, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, deleteUser, updatePassword, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };

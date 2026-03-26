@@ -1,0 +1,18 @@
+{
+  "name": "DJ Stream",
+  "short_name": "DJ Stream",
+  "description": "Live DJ streaming platform",
+  "start_url": "/watch.html",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0d0d",
+  "theme_color": "#ff4500",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

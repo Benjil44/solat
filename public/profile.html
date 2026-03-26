@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile — DJ Live</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0a0a0a;--card:#111;--border:#1e1e1e;--accent:#ff4400;--muted:#555;--text:#ccc}
+    body{background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;min-height:100vh}
+
+    /* ── Header ── */
+    .topbar{display:flex;align-items:center;gap:16px;padding:14px 20px;
+      background:#0d0d0d;border-bottom:1px solid var(--border);}
+    .topbar-logo{font-size:1.1em;font-weight:900;color:var(--accent);letter-spacing:2px}
+    .topbar-back{margin-left:auto;font-size:.82em;color:var(--muted);text-decoration:none;
+      padding:6px 14px;border:1px solid #2a2a2a;border-radius:6px;transition:.15s}
+    .topbar-back:hover{color:#fff;border-color:#444}
+    .topbar-logout{font-size:.82em;color:var(--muted);background:none;border:none;cursor:pointer;
+      padding:6px 14px;border:1px solid #2a2a2a;border-radius:6px;transition:.15s}
+    .topbar-logout:hover{color:#ff4400;border-color:#ff4400}
+
+    /* ── Layout ── */
+    .wrap{max-width:700px;margin:32px auto;padding:0 16px}
+
+    /* ── Profile card ── */
+    .profile-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:28px 32px;margin-bottom:20px;display:flex;align-items:center;gap:24px}
+    .avatar{width:64px;height:64px;border-radius:50%;background:#1a1a1a;
+      border:2px solid #2a2a2a;display:flex;align-items:center;justify-content:center;
+      font-size:1.8em;flex-shrink:0}
+    .profile-info{flex:1}
+    .profile-username{font-size:1.5em;font-weight:900;color:#fff;letter-spacing:1px;margin-bottom:6px}
+    .profile-reg{font-size:.78em;color:var(--muted);margin-bottom:10px}
+    .sub-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;
+      border-radius:20px;font-size:.78em;font-weight:bold;letter-spacing:1px;border:1px solid}
+    .sub-trial{border-color:#cc9900;color:#cc9900;background:#1a1200}
+    .sub-paid{border-color:#00aa44;color:#00cc55;background:#001a0a}
+    .sub-expired{border-color:#882200;color:#cc3300;background:#1a0500}
+    .sub-days{margin-left:8px;font-size:.82em;color:var(--muted);font-weight:normal}
+
+    /* ── Requests card ── */
+    .req-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:20px 24px}
+    .req-card-title{font-size:.72em;font-weight:bold;letter-spacing:2px;color:var(--muted);
+      text-transform:uppercase;margin-bottom:14px}
+    .req-empty{color:var(--muted);font-size:.88em;text-align:center;padding:20px 0}
+    .req-row{display:flex;align-items:center;gap:10px;padding:8px 0;
+      border-bottom:1px solid var(--border);font-size:.85em}
+    .req-row:last-child{border-bottom:none}
+    .req-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
+    .req-status{flex-shrink:0;font-size:.7em;font-weight:bold;letter-spacing:1px;
+      padding:2px 8px;border-radius:10px;border:1px solid}
+    .rs-pending{border-color:#555;color:#888}
+    .rs-accepted{border-color:#4488ff;color:#4488ff;background:#001025}
+    .rs-played{border-color:#00aa44;color:#00cc55;background:#001a0a}
+    .rs-rejected{border-color:#882200;color:#aa3300}
+    .req-votes{flex-shrink:0;color:#888;font-size:.8em}
+    .req-date{flex-shrink:0;color:var(--muted);font-size:.75em}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-logo">DJ LIVE</div>
+    <a class="topbar-back" href="/watch.html">← Back to Stream</a>
+    <button class="topbar-logout" onclick="doLogout()">Log out</button>
+  </div>
+
+  <div class="wrap">
+    <div class="profile-card" id="profile-card">
+      <div class="avatar">🎵</div>
+      <div class="profile-info">
+        <div class="profile-username" id="p-username">Loading…</div>
+        <div class="profile-reg" id="p-reg"></div>
+        <span class="sub-pill" id="p-sub-pill"></span>
+        <span class="sub-days" id="p-days"></span>
+      </div>
+    </div>
+
+    <div class="req-card">
+      <div class="req-card-title">Your Requests</div>
+      <div id="p-req-list"><div class="req-empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <script>
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function loadProfile() {
+      const res = await fetch('/api/profile');
+      if (!res.ok) { window.location.href = '/'; return; }
+      const d = await res.json();
+      render(d);
+    }
+
+    function render({ user, requests }) {
+      document.title = user.username + ' — DJ Live';
+      document.getElementById('p-username').textContent = user.username;
+      document.getElementById('p-reg').textContent =
+        'Member since ' + new Date(user.registeredAt).toLocaleDateString('en-GB', { year:'numeric', month:'long' });
+
+      const pill = document.getElementById('p-sub-pill');
+      pill.className = 'sub-pill sub-' + user.subType;
+      pill.textContent = user.subType === 'trial' ? 'FREE TRIAL'
+                       : user.subType === 'paid'  ? 'MEMBER'
+                       : 'EXPIRED';
+
+      const days = document.getElementById('p-days');
+      if (user.subType === 'expired') {
+        days.textContent = '';
+      } else {
+        days.textContent = user.daysLeft + ' day' + (user.daysLeft !== 1 ? 's' : '') + ' remaining';
+      }
+
+      const list = document.getElementById('p-req-list');
+      if (!requests.length) {
+        list.innerHTML = '<div class="req-empty">No requests yet — switch to the Requests tab to make one!</div>';
+        return;
+      }
+      const statusClass = { pending:'rs-pending', accepted:'rs-accepted', played:'rs-played', rejected:'rs-rejected' };
+      list.innerHTML = requests.map(r => {
+        const date = new Date(r.requestedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+        return `<div class="req-row">
+          <span class="req-title" title="${esc(r.title)}">${esc(r.title)}</span>
+          <span class="req-status ${statusClass[r.status] || 'rs-pending'}">${r.status.toUpperCase()}</span>
+          <span class="req-votes">★ ${r.votes}</span>
+          <span class="req-date">${date}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function doLogout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    loadProfile();
+  </script>
+</body>
+</html>

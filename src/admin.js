@@ -1,7 +1,9 @@
 const express = require('express');
-const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const router  = express.Router();
+const fs      = require('fs');
+const path    = require('path');
+const { setSuspended, extendSubscription, deleteUser } = require('./users');
+const { createInvites, listInvites, deleteInvite } = require('./invites');
 
 const DB_PATH = path.join(__dirname, '../data/users.json');
 
@@ -59,7 +61,9 @@ router.get('/users', requireAdmin, (req, res) => {
       registeredAt: u.registeredAt,
       paidUntil: u.paidUntil || null,
       status,
-      daysLeft
+      daysLeft,
+      suspended:  !!u.suspended,
+      chatBanned: !!u.chatBanned
     };
   });
 
@@ -77,29 +81,52 @@ router.post('/extend', requireAdmin, (req, res) => {
   if (!username || !days || isNaN(days) || days < 1) {
     return res.status(400).json({ error: 'Provide username and days (positive number)' });
   }
-
-  const raw = fs.existsSync(DB_PATH) ? JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) : {};
-  if (!raw[username]) return res.status(404).json({ error: 'User not found' });
-
-  const now = Date.now();
-  const currentPaid = raw[username].paidUntil ? new Date(raw[username].paidUntil).getTime() : 0;
-  const base = Math.max(now, currentPaid);  // extend from whichever is later
-  const newPaidUntil = new Date(base + days * 86400000).toISOString();
-
-  raw[username].paidUntil = newPaidUntil;
-  fs.writeFileSync(DB_PATH, JSON.stringify(raw, null, 2));
-
+  const newPaidUntil = extendSubscription(username, Number(days));
+  if (!newPaidUntil) return res.status(404).json({ error: 'User not found' });
   res.json({ success: true, username, paidUntil: newPaidUntil });
+});
+
+// ─── Suspend / unsuspend user ─────────────────────────────────────────────────
+router.patch('/users/:username/suspend', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const ok = setSuspended(username, true);
+  if (!ok) return res.status(404).json({ error: 'User not found' });
+  res.json({ success: true, username, suspended: true });
+});
+
+router.patch('/users/:username/unsuspend', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const ok = setSuspended(username, false);
+  if (!ok) return res.status(404).json({ error: 'User not found' });
+  res.json({ success: true, username, suspended: false });
 });
 
 // ─── Delete / ban user ────────────────────────────────────────────────────────
 router.delete('/users/:username', requireAdmin, (req, res) => {
   const { username } = req.params;
-  const raw = fs.existsSync(DB_PATH) ? JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) : {};
-  if (!raw[username]) return res.status(404).json({ error: 'User not found' });
+  const ok = deleteUser(username);
+  if (!ok) return res.status(404).json({ error: 'User not found' });
+  res.json({ success: true });
+});
 
-  delete raw[username];
-  fs.writeFileSync(DB_PATH, JSON.stringify(raw, null, 2));
+// ─── Invite codes ─────────────────────────────────────────────────────────────
+
+// List all invite codes
+router.get('/invites', requireAdmin, (req, res) => {
+  res.json(listInvites());
+});
+
+// Generate N new invite codes (body: { count: 1–50 })
+router.post('/invites', requireAdmin, (req, res) => {
+  const count = Math.max(1, Math.min(50, parseInt(req.body.count, 10) || 1));
+  const codes = createInvites(count);
+  res.json({ codes });
+});
+
+// Delete an unused invite code
+router.delete('/invites/:code', requireAdmin, (req, res) => {
+  const ok = deleteInvite(req.params.code);
+  if (!ok) return res.status(404).json({ error: 'Code not found' });
   res.json({ success: true });
 });
 

@@ -14,9 +14,66 @@ const helmet      = require('helmet');
 const authRoutes    = require('./src/auth');
 const adminRoutes   = require('./src/admin');
 const paymentRoutes = require('./src/payment');
-const { verifyToken } = require('./src/users');
-const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit } = require('./src/stream-ws');
-const { setupChatWS, getChatClientCount, djAnnounce }   = require('./src/chat-ws');
+const { verifyToken, findUser } = require('./src/users');
+const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
+const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
+const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB } = require('./src/music-db');
+const { setChatBan } = require('./src/users');
+const { banRecord, clearRecord: clearFlagged, getAll: getAllFlagged } = require('./src/flagged');
+const { addRequest, voteRequest, reactRequest, setStatus: setReqStatus, removeRequest, clearFinished, getRequests, getTrending, cleanupExpired, moveRequest, getAcceptedQueue } = require('./src/requests');
+const { resetStats, recordViewerCount, getStats } = require('./src/stats');
+const { saveSub, removeSub, notifyLive } = require('./src/push');
+
+// ─── Discord webhook ──────────────────────────────────────────────────────────
+function notifyDiscord(streamTitle) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  const body = JSON.stringify({
+    content: null,
+    embeds: [{
+      title: '🎧 DJ is LIVE',
+      description: streamTitle ? `Now playing: **${streamTitle}**` : 'The stream has started!',
+      color: 0xff4400,
+      url: process.env.SITE_URL || undefined,
+      timestamp: new Date().toISOString(),
+    }]
+  });
+  try {
+    const u = new URL(webhookUrl);
+    const mod = u.protocol === 'https:' ? require('https') : require('http');
+    const req = mod.request(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    });
+    req.on('error', () => {});
+    req.write(body);
+    req.end();
+  } catch {}
+}
+
+// ─── DJ Schedule ──────────────────────────────────────────────────────────────
+const SCHEDULE_PATH = path.join(__dirname, 'data', 'schedule.json');
+
+function getSchedule() {
+  try {
+    const d = JSON.parse(fs.readFileSync(SCHEDULE_PATH, 'utf8'));
+    // Expire past schedules automatically
+    if (d.scheduledAt && new Date(d.scheduledAt).getTime() < Date.now() - 30 * 60 * 1000) {
+      return null;
+    }
+    return d;
+  } catch { return null; }
+}
+
+function saveSchedule(data) {
+  fs.mkdirSync(path.dirname(SCHEDULE_PATH), { recursive: true });
+  fs.writeFileSync(SCHEDULE_PATH + '.tmp', JSON.stringify(data));
+  fs.renameSync(SCHEDULE_PATH + '.tmp', SCHEDULE_PATH);
+}
+
+function clearSchedule() {
+  try { fs.unlinkSync(SCHEDULE_PATH); } catch {}
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const HTTP_PORT  = process.env.PORT       || 3000;
@@ -77,8 +134,10 @@ app.use('/admin',   adminRoutes);
 app.use('/payment', paymentRoutes);
 
 // ─── Live state ───────────────────────────────────────────────────────────────
-let isLive   = false;
-let coverUrl = '';
+let isLive         = false;
+let coverUrl       = '';
+let nextTrackTitle = '';
+let nextTrackCover = '';
 
 // Viewer heartbeat map: username → timestamp
 const viewers = new Map();
@@ -89,18 +148,50 @@ app.post('/api/heartbeat', heartbeatLimiter, requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+let _wasLive = false;
 setInterval(() => {
   const cutoff = Date.now() - 30_000;
   for (const [k, t] of viewers) { if (t < cutoff) viewers.delete(k); }
+  const nowLive = isLive || isBrowserLive();
+  if (nowLive && !_wasLive) {
+    resetStats();  // browser DJ just went live
+    notifyLive(getStreamTitle()).catch(() => {});
+    notifyDiscord(getStreamTitle());
+    clearSchedule();
+  }
+  _wasLive = nowLive;
+  recordViewerCount(viewers.size);
 }, 10_000);
 
 // ─── Public APIs ──────────────────────────────────────────────────────────────
-// No-auth live check — safe to expose (no stream key or user data)
-app.get('/api/live', (req, res) => {
+// ─── Health check (no auth — safe for uptime monitors) ───────────────────────
+app.get('/api/health', (req, res) => {
   res.json({
+    status:  'ok',
+    uptime:  Math.floor(process.uptime()),
     live:    isLive || isBrowserLive(),
     viewers: viewers.size,
-    title:   getStreamTitle(),
+    memMB:   Math.round(process.memoryUsage().rss / 1024 / 1024),
+    version: require('./package.json').version,
+  });
+});
+
+// Tells the register page whether an invite code is required
+app.get('/api/invite-mode', (req, res) => {
+  res.json({ inviteOnly: process.env.INVITE_ONLY === 'true' });
+});
+
+// No-auth live check — safe to expose (no stream key, no user data, no stream URL)
+app.get('/api/live', (req, res) => {
+  const sched = getSchedule();
+  res.json({
+    live:        isLive || isBrowserLive(),
+    viewers:     viewers.size,
+    title:       getStreamTitle(),
+    coverUrl:    coverUrl || null,
+    nextTrack:   nextTrackTitle || null,
+    nextCover:   nextTrackCover || null,
+    scheduledAt: sched ? sched.scheduledAt : null,
   });
 });
 
@@ -110,12 +201,18 @@ app.get('/api/status', requireAuth, (req, res) => {
     streamKey: STREAM_KEY,
     title:     getStreamTitle(),
     coverUrl,
-    viewers:   viewers.size
+    viewers:   viewers.size,
+    nextTrack: nextTrackTitle || null,
+    nextCover: nextTrackCover || null,
   });
 });
 
-// Protected HLS segments — no browser caching for live content
-app.use('/live', requireAuth, (req, res, next) => {
+// HLS segments — auth required unless GUEST_WATCH=true is set
+// When guest watch is enabled anyone can view the stream without an account
+app.use('/live', (req, res, next) => {
+  if (process.env.GUEST_WATCH !== 'true') return requireAuth(req, res, next);
+  next();
+}, (req, res, next) => {
   if (req.path.endsWith('.m3u8') || req.path.endsWith('.ts')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -125,6 +222,21 @@ app.use('/live', requireAuth, (req, res, next) => {
 }, express.static(HLS_PATH));
 
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
+app.get('/api/admin/live-stats', requireAdmin, (req, res) => {
+  const stats = getStats();
+  const start = stats.sessionStart || getSessionStartTime();
+  const durationSec = start ? Math.floor((Date.now() - new Date(start).getTime()) / 1000) : 0;
+  res.json({
+    live:          isLive || isBrowserLive(),
+    viewers:       viewers.size,
+    peakViewers:   stats.peakViewers,
+    totalMessages: stats.totalMessages,
+    totalRequests: stats.totalRequests,
+    durationSec,
+    topRequested:  getTrending(5),
+  });
+});
+
 app.get('/api/admin/stream-status', requireAdmin, (req, res) => {
   res.json({
     live: isLive || isBrowserLive(),
@@ -136,9 +248,14 @@ app.get('/api/admin/stream-status', requireAdmin, (req, res) => {
   });
 });
 
-// Setlist for current session
+// Setlist for current live session
 app.get('/api/admin/setlist', requireAdmin, (req, res) => {
   res.json({ setlist: getSetlist(), sessionStart: getSessionStartTime() });
+});
+
+// Full session history (persisted across restarts)
+app.get('/api/admin/session-history', requireAdmin, (req, res) => {
+  res.json({ sessions: getSessionHistory() });
 });
 
 // List recordings
@@ -165,13 +282,261 @@ app.get('/api/admin/recordings/:file', requireAdmin, (req, res) => {
   res.download(full);
 });
 
+// Delete a recording
+app.delete('/api/admin/recordings/:file', requireAdmin, (req, res) => {
+  const file = path.basename(req.params.file);
+  const full = path.join(REC_DIR, file);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Not found' });
+  try { fs.unlinkSync(full); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/admin/title', requireAdmin, (req, res) => {
   const { title, cover } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
   setStreamTitle(title);
   coverUrl = typeof cover === 'string' ? cover.trim() : '';
+  // Clear next-track when the current track is set
+  nextTrackTitle = '';
+  nextTrackCover = '';
+  broadcastAll({ type: 'next-track', title: null, cover: null });
   djAnnounce(`Now playing: ${title}`);
   res.json({ ok: true, title: getStreamTitle(), coverUrl });
+});
+
+// DJ announces the upcoming track to viewers
+app.post('/api/admin/next-track', requireAdmin, (req, res) => {
+  const { title, cover } = req.body;
+  nextTrackTitle = typeof title === 'string' ? title.trim().slice(0, 120) : '';
+  nextTrackCover = typeof cover === 'string' ? cover.trim() : '';
+  broadcastAll({ type: 'next-track', title: nextTrackTitle || null, cover: nextTrackCover || null });
+  res.json({ ok: true });
+});
+
+// ─── User profile ─────────────────────────────────────────────────────────────
+app.get('/api/profile', requireAuth, (req, res) => {
+  const user = req.user;
+  const now  = Date.now();
+  const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+  const registered    = new Date(user.registeredAt).getTime();
+  const trialActive   = (now - registered) < SIX_MONTHS_MS;
+  const isPaid        = user.paidUntil && new Date(user.paidUntil).getTime() > now;
+  let subType, daysLeft;
+  if (isPaid) {
+    subType  = 'paid';
+    daysLeft = Math.ceil((new Date(user.paidUntil).getTime() - now) / 86400000);
+  } else if (trialActive) {
+    subType  = 'trial';
+    daysLeft = Math.ceil((SIX_MONTHS_MS - (now - registered)) / 86400000);
+  } else {
+    subType  = 'expired';
+    daysLeft = 0;
+  }
+  const userRequests = getRequests()
+    .filter(r => r.requestedBy === user.username)
+    .map(r => ({ id: r.id, title: r.title, status: r.status, votes: r.votes, requestedAt: r.requestedAt }));
+  res.json({
+    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt },
+    requests: userRequests,
+  });
+});
+
+// ─── Push Notifications ───────────────────────────────────────────────────────
+// Return the VAPID public key so clients can subscribe
+app.get('/api/push/vapid-key', (req, res) => {
+  const key = process.env.VAPID_PUBLIC_KEY;
+  if (!key) return res.status(503).json({ error: 'Push notifications not configured' });
+  res.json({ publicKey: key });
+});
+
+// Save a push subscription for the logged-in user
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
+  const sub = req.body;
+  if (!sub || !sub.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+  saveSub(req.user.username, sub);
+  res.json({ ok: true });
+});
+
+// Remove the push subscription for the logged-in user
+app.delete('/api/push/subscribe', requireAuth, (req, res) => {
+  removeSub(req.user.username);
+  res.json({ ok: true });
+});
+
+// ─── DJ Schedule ──────────────────────────────────────────────────────────────
+// Public: viewers poll this to show go-live countdown
+app.get('/api/schedule', (req, res) => {
+  const s = getSchedule();
+  res.json(s || { scheduledAt: null });
+});
+
+// Admin: set or clear the schedule
+app.post('/api/admin/schedule', requireAdmin, (req, res) => {
+  const { scheduledAt } = req.body; // ISO string or null
+  if (!scheduledAt) {
+    clearSchedule();
+    return res.json({ ok: true, scheduledAt: null });
+  }
+  const ts = new Date(scheduledAt).getTime();
+  if (isNaN(ts)) return res.status(400).json({ error: 'Invalid date' });
+  saveSchedule({ scheduledAt });
+  res.json({ ok: true, scheduledAt });
+});
+
+// ─── Track Requests ───────────────────────────────────────────────────────────
+// Viewer: get current request list + accepted play queue
+app.get('/api/requests', requireAuthOrAdmin, (req, res) => {
+  res.json({ requests: getRequests(), queue: getAcceptedQueue() });
+});
+
+// Viewer: submit a request (rate-limited in requests.js — 1 per 3 min)
+app.post('/api/requests', requireAuth, (req, res) => {
+  const title = String(req.body.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'Title required' });
+  const result = addRequest(req.user.username, title);
+  if (result.error) return res.status(429).json({ error: result.error });
+  broadcastRequests();
+  res.json(result);
+});
+
+// Viewer: toggle vote on a request
+app.post('/api/requests/:id/vote', requireAuth, (req, res) => {
+  const result = voteRequest(req.params.id, req.user.username);
+  if (result.error) return res.status(404).json(result);
+  broadcastRequests();
+  res.json(result);
+});
+
+// DJ/Admin: change request status (accepted | played | rejected | pending)
+app.patch('/api/requests/:id/status', requireAdmin, (req, res) => {
+  const { status } = req.body;
+  if (!['pending', 'accepted', 'played', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  const ok = setReqStatus(req.params.id, status);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
+  broadcastRequests();
+  res.json({ ok: true });
+});
+
+// DJ/Admin: delete a single request
+app.delete('/api/requests/:id', requireAdmin, (req, res) => {
+  const ok = removeRequest(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
+  broadcastRequests();
+  res.json({ ok: true });
+});
+
+// DJ/Admin: reorder accepted request in the play queue
+app.patch('/api/requests/:id/move', requireAdmin, (req, res) => {
+  const { direction } = req.body;
+  if (!['up', 'down'].includes(direction)) return res.status(400).json({ error: 'direction must be up or down' });
+  const ok = moveRequest(req.params.id, direction);
+  if (!ok) return res.status(404).json({ error: 'Not found or cannot move' });
+  broadcastRequests();
+  res.json({ ok: true });
+});
+
+// DJ/Admin: clear all played/rejected from the list
+app.delete('/api/requests', requireAdmin, (req, res) => {
+  clearFinished();
+  broadcastRequests();
+  res.json({ ok: true });
+});
+
+// All-time trending
+app.get('/api/trending', requireAuthOrAdmin, (req, res) => {
+  res.json({ trending: getTrending() });
+});
+
+// Spelling suggestions (debounced from client — no rate limit needed, read-only)
+app.get('/api/requests/suggest', requireAuthOrAdmin, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 3) return res.json({ suggestions: [] });
+  res.json({ suggestions: suggest(q) });
+});
+
+// ─── Music DB / Corrections ───────────────────────────────────────────────────
+// DJ submits a spelling correction for admin review
+app.post('/api/music-db/corrections', requireAdmin, (req, res) => {
+  const { original, canonical } = req.body;
+  if (!original || !canonical) return res.status(400).json({ error: 'original and canonical required' });
+  const correction = submitCorrection(original.trim(), canonical.trim(), 'DJ');
+  res.json({ ok: true, correction });
+});
+
+// Admin sees pending corrections
+app.get('/api/music-db/corrections', requireAdmin, (req, res) => {
+  res.json({ corrections: getCorrections(req.query.status || undefined) });
+});
+
+// Admin accepts a correction — teaches the music DB
+app.patch('/api/music-db/corrections/:id/accept', requireAdmin, (req, res) => {
+  const ok = acceptCorrection(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found or already resolved' });
+  res.json({ ok: true });
+});
+
+// Admin rejects a correction
+app.patch('/api/music-db/corrections/:id/reject', requireAdmin, (req, res) => {
+  const ok = rejectCorrection(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found or already resolved' });
+  res.json({ ok: true });
+});
+
+// Admin: export music DB as CSV
+app.get('/api/admin/music-db/export.csv', requireAdmin, (req, res) => {
+  const rows = getMusicDB();
+  const csv = [
+    'title,plays,score,aliases',
+    ...rows.map(r => [
+      `"${String(r.canonical).replace(/"/g, '""')}"`,
+      r.plays  || 0,
+      r.score  || 0,
+      `"${(r.aliases || []).join('; ').replace(/"/g, '""')}"`,
+    ].join(','))
+  ].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="music-db.csv"');
+  res.send(csv);
+});
+
+// Viewer: add/toggle emoji reaction on a request
+app.post('/api/requests/:id/react', requireAuth, (req, res) => {
+  const { emoji } = req.body;
+  const result = reactRequest(req.params.id, emoji, req.user.username);
+  if (result.error) return res.status(400).json(result);
+  broadcastRequests();
+  res.json(result);
+});
+
+// ─── Chat moderation ──────────────────────────────────────────────────────────
+// DJ mutes a user from chat (they can still request music)
+app.post('/api/admin/chat-ban/:username', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const ok = setChatBan(username, true);
+  if (!ok) return res.status(404).json({ error: 'User not found' });
+  // Capture their recent chat history as evidence
+  const history = getChatHistoryForUser(username);
+  banRecord(username, 'DJ', history);
+  // Announce in chat
+  djAnnounce(`${username} has been muted.`);
+  res.json({ ok: true, username });
+});
+
+// Admin unmutes a user
+app.delete('/api/admin/chat-ban/:username', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const ok = setChatBan(username, false);
+  if (!ok) return res.status(404).json({ error: 'User not found' });
+  clearFlagged(username);
+  djAnnounce(`${username} has been unmuted.`);
+  res.json({ ok: true, username });
+});
+
+// Admin sees all flagged messages (from muted users)
+app.get('/api/admin/flagged-messages', requireAdmin, (req, res) => {
+  res.json({ flagged: getAllFlagged() });
 });
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
@@ -181,23 +546,43 @@ function requireAuth(req, res, next) {
     if (req.accepts('html')) return res.redirect('/');
     return res.status(401).json({ error: 'Not authenticated' });
   }
-  const user = verifyToken(token);
-  if (!user) {
+  const payload = verifyToken(token);
+  if (!payload) {
     res.clearCookie('token');
     if (req.accepts('html')) return res.redirect('/');
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+  // Re-fetch from DB so subscription changes (admin extends, payment webhook) take effect
+  // immediately without requiring the user to re-login.
+  const freshUser = findUser(payload.username);
+  if (!freshUser) {
+    res.clearCookie('token');
+    if (req.accepts('html')) return res.redirect('/');
+    return res.status(401).json({ error: 'User not found' });
+  }
+  if (freshUser.suspended) {
+    res.clearCookie('token');
+    if (req.accepts('html')) return res.redirect('/');
+    return res.status(403).json({ error: 'Account suspended' });
+  }
   const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
-  const registered    = new Date(user.registeredAt).getTime();
+  const registered    = new Date(freshUser.registeredAt).getTime();
   const now           = Date.now();
   const trialActive   = (now - registered) < SIX_MONTHS_MS;
-  const isPaid        = user.paidUntil && new Date(user.paidUntil).getTime() > now;
+  const isPaid        = freshUser.paidUntil && new Date(freshUser.paidUntil).getTime() > now;
   if (!trialActive && !isPaid) {
     if (req.accepts('html')) return res.redirect('/expired.html');
     return res.status(403).json({ error: 'Subscription expired' });
   }
-  req.user = user;
+  req.user = freshUser;
   next();
+}
+
+// Accepts either a valid user token OR the admin key
+function requireAuthOrAdmin(req, res, next) {
+  const key = req.cookies.adminKey || req.headers['x-admin-key'];
+  if (key && key === process.env.ADMIN_KEY) return next();
+  return requireAuth(req, res, next);
 }
 
 function requireAdmin(req, res, next) {
@@ -212,8 +597,8 @@ function requireAdmin(req, res, next) {
 // ─── HTTP server + WebSocket upgrade ─────────────────────────────────────────
 const server = http.createServer(app);
 
-const wssStream = new WebSocket.Server({ noServer: true }); // /ws/stream (DJ)
-const wssChat   = new WebSocket.Server({ noServer: true }); // /ws/chat (all)
+const wssStream = new WebSocket.Server({ noServer: true, maxPayload: 5 * 1024 * 1024 }); // /ws/stream (DJ) — 5 MB max chunk
+const wssChat   = new WebSocket.Server({ noServer: true, maxPayload: 4 * 1024 });         // /ws/chat (all) — 4 KB max message
 
 server.on('upgrade', (req, socket, head) => {
   const { pathname } = new URL(req.url, `http://localhost`);
@@ -272,6 +657,10 @@ nms.on('prePublish', (id, StreamPath) => {
     return;
   }
   isLive = true;
+  resetStats();
+  notifyLive(getStreamTitle()).catch(() => {});
+  notifyDiscord(getStreamTitle());
+  clearSchedule();
   console.log('[RTMP] Stream started →', StreamPath);
 });
 
@@ -321,6 +710,11 @@ function backupUsers() {
 
 backupUsers();                              // run on startup
 setInterval(backupUsers, 24 * 60 * 60 * 1000); // then every 24h
+
+// Expire stale requests every 5 minutes
+setInterval(() => {
+  if (cleanupExpired()) broadcastRequests();
+}, 5 * 60 * 1000).unref();
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {

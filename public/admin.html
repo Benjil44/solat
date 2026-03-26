@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ff4500">
+  <link rel="manifest" href="/manifest.json">
   <title>DJ Admin Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -117,9 +119,10 @@
       font-size: 0.78em;
       font-weight: bold;
     }
-    .badge-trial   { background: #332200; color: #ffcc00; }
-    .badge-paid    { background: #002211; color: #44ff88; }
-    .badge-expired { background: #220000; color: #ff6666; }
+    .badge-trial     { background: #332200; color: #ffcc00; }
+    .badge-paid      { background: #002211; color: #44ff88; }
+    .badge-expired   { background: #220000; color: #ff6666; }
+    .badge-suspended { background: #1a0030; color: #cc66ff; }
 
     /* ── Actions ── */
     .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -158,6 +161,28 @@
     }
     .btn-delete:hover { background: #330000; }
 
+    .btn-suspend {
+      padding: 5px 10px;
+      background: #1a0030;
+      border: 1px solid #cc66ff;
+      color: #cc66ff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82em;
+    }
+    .btn-suspend:hover { background: #2a0050; }
+
+    .btn-unsuspend {
+      padding: 5px 10px;
+      background: #1a1a00;
+      border: 1px solid #aaaa44;
+      color: #dddd88;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82em;
+    }
+    .btn-unsuspend:hover { background: #2a2a00; }
+
     /* ── Toast ── */
     #toast {
       position: fixed;
@@ -175,6 +200,41 @@
 
     .empty { color: #555; padding: 20px 0; text-align: center; }
 
+    /* ── Invite codes ── */
+    .invite-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    .invite-mode-badge {
+      padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:bold;
+    }
+    .badge-invite-on  { background:#002211; color:#44ff88; border:1px solid #44ff88; }
+    .badge-invite-off { background:#1a1a1a; color:#666;    border:1px solid #333; }
+    .gen-input {
+      width:60px; padding:5px 8px; background:#1a1a1a; border:1px solid #444;
+      border-radius:6px; color:#fff; font-size:0.85em; outline:none; text-align:center;
+    }
+    .gen-input:focus { border-color:#ff4400; }
+    #invite-list {
+      background:#111; border:1px solid #222; border-radius:10px;
+      overflow:hidden; max-height:320px; overflow-y:auto;
+    }
+    .invite-row {
+      display:flex; align-items:center; gap:12px; padding:10px 14px;
+      border-bottom:1px solid #1a1a1a; font-size:0.88em;
+    }
+    .invite-row:last-child { border-bottom:none; }
+    .invite-code {
+      font-family:monospace; font-size:1em; letter-spacing:2px;
+      font-weight:bold; min-width:90px;
+    }
+    .invite-code.unused { color:#fff; }
+    .invite-code.used   { color:#444; text-decoration:line-through; }
+    .invite-used-by { flex:1; color:#555; font-size:0.82em; }
+    .invite-date    { color:#444; font-size:0.78em; white-space:nowrap; }
+    .btn-copy-code  {
+      padding:3px 9px; background:transparent; border:1px solid #333;
+      color:#666; border-radius:5px; cursor:pointer; font-size:0.75em;
+    }
+    .btn-copy-code:hover { border-color:#aaa; color:#aaa; }
+
     /* ── Recordings ── */
     .section-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -187,7 +247,10 @@
       border: 1px solid #444; color: #aaa;
       border-radius: 6px; cursor: pointer; font-size: 0.82em;
     }
-    .btn-sm:hover { border-color: #ff4400; color: #ff4400; }
+    .btn-sm:hover  { border-color: #ff4400; color: #ff4400; }
+    .btn-sm.active { border-color: #ff4400; color: #ff4400; background: #1a0800; }
+    .btn-sm.btn-danger { border-color: #662200; color: #cc4400; }
+    .btn-sm.btn-danger:hover { border-color: #ff4400; color: #ff5500; background: #220800; }
 
     .rec-player-wrap {
       background: #141414; border: 1px solid #2a2a2a;
@@ -232,10 +295,110 @@
     }
     .btn-dl:hover { background: #002a12; }
 
+    .btn-del-rec {
+      padding: 5px 10px; background: transparent;
+      border: 1px solid #553333; color: #885555;
+      border-radius: 6px; cursor: pointer; font-size: 0.8em;
+    }
+    .btn-del-rec:hover { background: #220000; border-color: #ff4444; color: #ff6666; }
+
     #rec-list {
       background: #111; border: 1px solid #222;
       border-radius: 10px; overflow: hidden;
     }
+
+    /* ── Music Corrections ── */
+    .correction-card {
+      background:#111; border:1px solid #222; border-radius:9px;
+      padding:12px 16px; margin-bottom:8px; display:flex;
+      flex-direction:column; gap:6px;
+    }
+    .correction-card:hover { border-color:#333; }
+    .corr-pair { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+    .corr-original  { flex:1; font-size:.85em; color:#ff9966; font-weight:bold; min-width:120px; }
+    .corr-arrow     { color:#555; font-size:.9em; }
+    .corr-canonical { flex:1; font-size:.85em; color:var(--green); font-weight:bold; min-width:120px; }
+    .corr-meta      { font-size:.75em; color:#555; }
+    .corr-actions   { display:flex; gap:8px; margin-top:4px; }
+    .btn-accept-corr {
+      padding:4px 14px; background:#001a0a; border:1px solid #44ff88;
+      color:#44ff88; border-radius:6px; cursor:pointer; font-size:.8em;
+    }
+    .btn-accept-corr:hover { background:#002a12; }
+    .btn-reject-corr {
+      padding:4px 12px; background:transparent; border:1px solid #555;
+      color:#888; border-radius:6px; cursor:pointer; font-size:.8em;
+    }
+    .btn-reject-corr:hover { border-color:#ff4444; color:#ff6666; }
+    .badge-resolved { padding:3px 9px; border-radius:10px; font-size:.72em; font-weight:bold; }
+    .badge-accepted-corr { background:#001a0a; color:#44ff88; }
+    .badge-rejected-corr { background:#1a0000; color:#666; }
+
+    /* ── Muted Users ── */
+    .muted-card {
+      background:#111; border:1px solid #222; border-radius:9px;
+      margin-bottom:8px; overflow:hidden;
+    }
+    .muted-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 14px; background:#161616;
+    }
+    .muted-head-left { display:flex; align-items:center; gap:10px; }
+    .muted-username { font-weight:bold; font-size:.9em; color:#cc66ff; }
+    .muted-date     { font-size:.75em; color:#555; }
+    .btn-unmute {
+      padding:4px 12px; background:transparent; border:1px solid #aaaa44;
+      color:#dddd88; border-radius:6px; cursor:pointer; font-size:.8em;
+    }
+    .btn-unmute:hover { background:#2a2a00; }
+    .muted-msgs { display:none; padding:8px 0; max-height:200px; overflow-y:auto; }
+    .muted-msgs.open { display:block; }
+    .flagged-msg {
+      display:flex; gap:10px; padding:5px 14px;
+      border-bottom:1px solid #1a1a1a; font-size:.78em;
+    }
+    .flagged-msg:last-child { border-bottom:none; }
+    .flag-type-pre  { color:#ff9966; font-size:.7em; min-width:52px; flex-shrink:0; }
+    .flag-type-post { color:#ff4444; font-size:.7em; min-width:52px; flex-shrink:0; }
+    .flag-time  { color:#444; font-size:.72em; white-space:nowrap; flex-shrink:0; }
+    .flag-text  { flex:1; color:#aaa; word-break:break-word; }
+    .show-msgs-btn {
+      padding:3px 10px; background:transparent; border:1px solid #333;
+      color:#666; border-radius:5px; cursor:pointer; font-size:.75em;
+    }
+    .show-msgs-btn:hover { border-color:#888; color:#aaa; }
+
+    /* ── Session History ── */
+    .session-block {
+      background: #111; border: 1px solid #222; border-radius: 10px;
+      margin-bottom: 10px; overflow: hidden;
+    }
+    .session-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; cursor: pointer; user-select: none;
+      background: #161616; border-bottom: 1px solid #1e1e1e;
+      transition: background .15s;
+    }
+    .session-head:hover { background: #1c1c1c; }
+    .session-head-left { display: flex; align-items: center; gap: 10px; }
+    .session-num { font-size: .72em; color: #555; font-weight: bold; letter-spacing: 1px; }
+    .session-date { font-size: .85em; color: #ccc; font-weight: bold; }
+    .session-count { font-size: .75em; color: #666; }
+    .session-toggle { color: #555; font-size: .8em; transition: transform .2s; }
+    .session-toggle.open { transform: rotate(90deg); }
+    .session-tracks { display: none; padding: 6px 0; }
+    .session-tracks.open { display: block; }
+    .session-track-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 14px; font-size: .82em;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .session-track-row:last-child { border-bottom: none; }
+    .session-track-time { color: #555; font-size: .78em; min-width: 54px; flex-shrink: 0; font-family: monospace; }
+    .session-track-title { flex: 1; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-dl-btn { padding: 3px 10px; background: transparent; border: 1px solid #333;
+      border-radius: 5px; color: #888; cursor: pointer; font-size: .75em; white-space: nowrap; }
+    .session-dl-btn:hover { border-color: #ff4400; color: #ff4400; }
   </style>
 </head>
 <body>
@@ -276,6 +439,19 @@
     </div>
   </div>
 
+  <!-- Live Session Stats -->
+  <div class="content">
+    <div class="section-title">Live Session Stats</div>
+    <div class="stats" style="margin-bottom:0">
+      <div class="stat-card"><div class="val" id="ls-viewers">—</div><div class="lbl">Viewers Now</div></div>
+      <div class="stat-card"><div class="val" id="ls-peak">—</div><div class="lbl">Peak Viewers</div></div>
+      <div class="stat-card"><div class="val" id="ls-msgs">—</div><div class="lbl">Chat Messages</div></div>
+      <div class="stat-card"><div class="val" id="ls-reqs">—</div><div class="lbl">Requests Sent</div></div>
+      <div class="stat-card"><div class="val" id="ls-dur">—</div><div class="lbl">Session Duration</div></div>
+    </div>
+    <div id="ls-top-list" style="padding:12px 0 4px"></div>
+  </div>
+
   <!-- User list -->
   <div class="content">
     <div class="section-title">Users</div>
@@ -298,6 +474,21 @@
     </div>
   </div>
 
+  <!-- Invite Codes -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title" style="margin:0">Invite Codes</div>
+      <span id="invite-mode-badge" class="invite-mode-badge badge-invite-off">Open Registration</span>
+    </div>
+    <div class="invite-toolbar">
+      <input type="number" class="gen-input" id="invite-count" value="1" min="1" max="50">
+      <button class="btn-sm" onclick="generateInvites()">+ Generate</button>
+      <button class="btn-sm" onclick="loadInvites()">⟳ Refresh</button>
+      <button class="btn-sm" onclick="copyAllUnused()" id="copy-all-btn" style="display:none">Copy All Unused</button>
+    </div>
+    <div id="invite-list"><div class="empty">Loading…</div></div>
+  </div>
+
   <!-- Recordings -->
   <div class="content">
     <div class="section-header">
@@ -313,6 +504,38 @@
     <div id="rec-list"><div class="empty">Loading...</div></div>
   </div>
 
+  <!-- Session History -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Session History</div>
+      <button class="btn-sm" onclick="loadSessionHistory()">⟳ Refresh</button>
+    </div>
+    <div id="session-list"><div class="empty">No sessions recorded yet.</div></div>
+  </div>
+
+  <!-- Music Corrections -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Music Corrections</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="loadCorrections('pending')" id="corr-filter-pending">Pending</button>
+        <button class="btn-sm" onclick="loadCorrections()" id="corr-filter-all">All</button>
+        <button class="btn-sm" onclick="loadCorrections()">⟳ Refresh</button>
+        <button class="btn-sm" onclick="window.open('/api/admin/music-db/export.csv','_blank')" title="Download learned track database as CSV">⬇ Export CSV</button>
+      </div>
+    </div>
+    <div id="corrections-list"><div class="empty">No corrections yet. When the DJ fixes a misspelled request, it appears here for review.</div></div>
+  </div>
+
+  <!-- Muted Users -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Muted Users</div>
+      <button class="btn-sm" onclick="loadMutedUsers()">⟳ Refresh</button>
+    </div>
+    <div id="muted-list"><div class="empty">No muted users.</div></div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
@@ -320,10 +543,44 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadRecordings()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
-      setInterval(loadRecordings, 60000); // refresh recording list every minute
+      setInterval(loadLiveStats, 5000);
+      setInterval(loadRecordings, 60000);
+      setInterval(loadCorrections, 60000);
+      setInterval(loadMutedUsers, 30000);
+    }
+
+    // ── Live Session Stats ─────────────────────────────────────────────────────
+    async function loadLiveStats() {
+      try {
+        const res = await fetch('/api/admin/live-stats', { headers: { 'x-admin-key': adminKey } });
+        if (!res.ok) return;
+        const d = await res.json();
+        document.getElementById('ls-viewers').textContent = d.viewers;
+        document.getElementById('ls-peak').textContent    = d.peakViewers;
+        document.getElementById('ls-msgs').textContent    = d.totalMessages;
+        document.getElementById('ls-reqs').textContent    = d.totalRequests;
+        const s = d.durationSec;
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sc = s % 60;
+        document.getElementById('ls-dur').textContent =
+          (h ? h + ':' : '') + String(m).padStart(2,'0') + ':' + String(sc).padStart(2,'0');
+        const topEl = document.getElementById('ls-top-list');
+        if (!d.topRequested.length) {
+          topEl.innerHTML = '<span style="color:#555;font-size:.85em">No trending data yet</span>';
+        } else {
+          topEl.innerHTML = '<div style="font-size:.72em;color:#888;letter-spacing:2px;margin-bottom:6px">TOP REQUESTED</div>' +
+            d.topRequested.map((t, i) =>
+              `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e1e1e;font-size:.85em">
+                <span><span style="color:#ff4400;margin-right:8px">${i+1}.</span>${esc(t.title)}</span>
+                <span style="color:#555">${t.score}pts</span>
+              </div>`
+            ).join('');
+        }
+      } catch {}
     }
 
     // ── Stream status ─────────────────────────────────────────────────────────
@@ -377,22 +634,31 @@
         return;
       }
 
-      tbody.innerHTML = users.map(u => `
+      tbody.innerHTML = users.map(u => {
+        const chatBadge   = u.chatBanned ? ' <span class="badge" style="background:#1a0030;color:#cc66ff;font-size:.7em">MUTED</span>' : '';
+        const statusBadge = u.suspended
+          ? '<span class="badge badge-suspended">SUSPENDED</span>'
+          : `<span class="badge badge-${u.status}">${u.status.toUpperCase()}</span>${chatBadge}`;
+        const suspendBtn = u.suspended
+          ? `<button class="btn-unsuspend" onclick="toggleSuspend('${esc(u.username)}', false)">Unsuspend</button>`
+          : `<button class="btn-suspend"   onclick="toggleSuspend('${esc(u.username)}', true)">Suspend</button>`;
+        return `
         <tr>
           <td><strong>${esc(u.username)}</strong></td>
           <td style="color:#888">${fmtDate(u.registeredAt)}</td>
-          <td><span class="badge badge-${u.status}">${u.status.toUpperCase()}</span></td>
+          <td>${statusBadge}</td>
           <td>${u.daysLeft > 0 ? u.daysLeft + 'd' : '—'}</td>
           <td style="color:#888;font-size:0.85em">${u.paidUntil ? fmtDate(u.paidUntil) : '—'}</td>
           <td>
             <div class="action-row">
               <input type="number" class="days-input" id="days-${esc(u.username)}" value="30" min="1" max="3650">
               <button class="btn-extend" onclick="extendUser('${esc(u.username)}')">+ Extend</button>
+              ${suspendBtn}
               <button class="btn-delete" onclick="deleteUser('${esc(u.username)}')">Delete</button>
             </div>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
@@ -422,6 +688,19 @@
       const data = await res.json();
       if (res.ok) {
         toast(`Deleted ${username}`);
+        loadUsers();
+      } else {
+        toast(data.error || 'Error', true);
+      }
+    }
+
+    async function toggleSuspend(username, suspend) {
+      const action = suspend ? 'suspend' : 'unsuspend';
+      if (suspend && !confirm(`Suspend "${username}"? They will be logged out and unable to access the site.`)) return;
+      const res = await fetch(`/admin/users/${encodeURIComponent(username)}/${action}`, { method: 'PATCH' });
+      const data = await res.json();
+      if (res.ok) {
+        toast(suspend ? `Suspended ${username}` : `Unsuspended ${username}`);
         loadUsers();
       } else {
         toast(data.error || 'Error', true);
@@ -460,6 +739,7 @@
           <div class="rec-actions">
             <button class="btn-play" id="rec-btn-${esc(r.name)}" onclick="playRecording('${esc(r.name)}')">▶ Play</button>
             <a class="btn-dl" href="/api/admin/recordings/${encodeURIComponent(r.name)}" download="${esc(r.name)}">⬇ Download</a>
+            <button class="btn-del-rec" onclick="deleteRecording('${esc(r.name)}')">✕</button>
           </div>
         </div>
       `).join('');
@@ -502,6 +782,333 @@
       if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
       if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
       return Math.round(bytes / 1e3) + ' KB';
+    }
+
+    async function deleteRecording(name) {
+      if (!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
+      // Stop playback if this recording is playing
+      if (currentRecName === name) {
+        document.getElementById('rec-audio').pause();
+        document.getElementById('rec-player-wrap').style.display = 'none';
+        currentRecName = null;
+      }
+      const res = await fetch(`/api/admin/recordings/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (res.ok) { toast(`Deleted ${name}`); loadRecordings(); }
+      else { const d = await res.json(); toast(d.error || 'Failed to delete', true); }
+    }
+
+    // ── Invites ───────────────────────────────────────────────────────────────
+    async function loadInvites() {
+      try {
+        const res = await fetch('/admin/invites');
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const data = await res.json();
+        renderInvites(Array.isArray(data) ? data : []);
+      } catch {
+        document.getElementById('invite-list').innerHTML = '<div class="empty">Failed to load invite codes</div>';
+      }
+    }
+
+    function renderInvites(invites) {
+      const el = document.getElementById('invite-list');
+      const unused = invites.filter(i => !i.usedBy);
+      const copyBtn = document.getElementById('copy-all-btn');
+      copyBtn.style.display = unused.length > 0 ? 'inline-block' : 'none';
+
+      // Update invite mode badge
+      fetch('/api/invite-mode').then(r => r.json()).then(d => {
+        const badge = document.getElementById('invite-mode-badge');
+        if (d.inviteOnly) {
+          badge.textContent = 'Invite Only';
+          badge.className = 'invite-mode-badge badge-invite-on';
+        } else {
+          badge.textContent = 'Open Registration';
+          badge.className = 'invite-mode-badge badge-invite-off';
+        }
+      }).catch(() => {});
+
+      if (!invites.length) {
+        el.innerHTML = '<div class="empty">No invite codes yet — generate some above</div>';
+        return;
+      }
+
+      el.innerHTML = invites.map(inv => {
+        const used = !!inv.usedBy;
+        const dateStr = inv.usedAt ? fmtDate(inv.usedAt) : (inv.createdAt ? fmtDate(inv.createdAt) : '');
+        const meta = used
+          ? `Used by <strong>${esc(inv.usedBy)}</strong> · ${dateStr}`
+          : (inv.createdAt ? `Created ${dateStr}` : '');
+        return `
+          <div class="user-row" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid #1a1a1a">
+            <span class="invite-code ${used ? 'used' : 'unused'}" style="font-family:monospace;font-size:1em;letter-spacing:2px;flex:1">${esc(inv.code)}</span>
+            <span style="flex:2;font-size:0.82em;color:#888">${meta}</span>
+            ${!used ? `<button class="btn-sm" style="padding:4px 10px" onclick="copyCode('${esc(inv.code)}')">Copy</button>` : ''}
+            ${!used ? `<button class="btn-sm btn-danger" style="padding:4px 10px" onclick="deleteInvite('${esc(inv.code)}')">Delete</button>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    async function generateInvites() {
+      const count = parseInt(document.getElementById('invite-count').value, 10) || 1;
+      try {
+        const res = await fetch('/admin/invites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count })
+        });
+        if (!res.ok) { toast('Failed to generate codes', true); return; }
+        toast(`Generated ${count} invite code${count > 1 ? 's' : ''}`);
+        await loadInvites();
+      } catch { toast('Network error', true); }
+    }
+
+    async function deleteInvite(code) {
+      if (!confirm(`Delete invite code ${code}?`)) return;
+      try {
+        const res = await fetch(`/admin/invites/${encodeURIComponent(code)}`, { method: 'DELETE' });
+        if (!res.ok) { toast('Failed to delete code', true); return; }
+        toast('Code deleted');
+        await loadInvites();
+      } catch { toast('Network error', true); }
+    }
+
+    function copyCode(code) {
+      navigator.clipboard.writeText(code).then(() => toast(`Copied ${code}`)).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = code; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        toast(`Copied ${code}`);
+      });
+    }
+
+    function copyAllUnused() {
+      const spans = document.querySelectorAll('.invite-code.unused');
+      const codes = Array.from(spans).map(s => s.textContent.trim()).join('\n');
+      if (!codes) { toast('No unused codes', true); return; }
+      navigator.clipboard.writeText(codes).then(() => toast(`Copied ${spans.length} codes`)).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = codes; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        toast(`Copied ${spans.length} codes`);
+      });
+    }
+
+    // ── Session History ───────────────────────────────────────────────────────
+    async function loadSessionHistory() {
+      try {
+        // Also include the current live session if active
+        const [histRes, liveRes] = await Promise.all([
+          fetch('/api/admin/session-history'),
+          fetch('/api/admin/setlist')
+        ]);
+        if (histRes.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const { sessions } = await histRes.json();
+        const liveData = liveRes.ok ? await liveRes.json() : null;
+        renderSessionHistory(sessions, liveData);
+      } catch {
+        document.getElementById('session-list').innerHTML = '<div class="empty">Failed to load session history</div>';
+      }
+    }
+
+    function renderSessionHistory(sessions, liveData) {
+      const el = document.getElementById('session-list');
+      const allSessions = [];
+
+      // Prepend current live session if there are tracks
+      if (liveData && liveData.setlist && liveData.setlist.length) {
+        allSessions.push({ start: liveData.sessionStart, tracks: liveData.setlist, live: true });
+      }
+      allSessions.push(...sessions);
+
+      if (!allSessions.length) {
+        el.innerHTML = '<div class="empty">No sessions recorded yet.</div>';
+        return;
+      }
+
+      el.innerHTML = allSessions.map((sess, i) => {
+        const num      = allSessions.length - i;
+        const dateStr  = sess.start ? fmtDate(sess.start) : 'Unknown date';
+        const timeStr  = sess.start ? fmtTime24(sess.start) : '';
+        const liveTag  = sess.live ? ' <span style="color:#ff4400;font-size:.72em;letter-spacing:1px">● LIVE</span>' : '';
+        const trackRows = sess.tracks.map(t => `
+          <div class="session-track-row">
+            <span class="session-track-time">${fmtTime24(t.time)}</span>
+            <span class="session-track-title">${esc(t.title)}</span>
+          </div>`).join('');
+
+        return `
+          <div class="session-block">
+            <div class="session-head" onclick="toggleSession(${i})">
+              <div class="session-head-left">
+                <span class="session-num">#${num}</span>
+                <span class="session-date">${dateStr} ${timeStr}${liveTag}</span>
+                <span class="session-count">${sess.tracks.length} track${sess.tracks.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <button class="session-dl-btn" onclick="event.stopPropagation();downloadSession(${i})" title="Download as .txt">⬇ .txt</button>
+                <span class="session-toggle" id="sess-toggle-${i}">▶</span>
+              </div>
+            </div>
+            <div class="session-tracks" id="sess-tracks-${i}">${trackRows}</div>
+          </div>`;
+      }).join('');
+
+      // Auto-open live session
+      if (liveData && liveData.setlist && liveData.setlist.length) toggleSession(0);
+
+      // Store for download
+      el._sessions = allSessions;
+    }
+
+    function toggleSession(i) {
+      const tracks = document.getElementById('sess-tracks-' + i);
+      const toggle = document.getElementById('sess-toggle-' + i);
+      if (!tracks) return;
+      const open = tracks.classList.toggle('open');
+      if (toggle) toggle.classList.toggle('open', open);
+    }
+
+    function downloadSession(i) {
+      const el = document.getElementById('session-list');
+      const sess = el._sessions && el._sessions[i];
+      if (!sess) return;
+      const lines = ['Session: ' + (sess.start ? new Date(sess.start).toLocaleString() : 'Unknown'), ''];
+      sess.tracks.forEach((t, n) => {
+        lines.push(`${String(n + 1).padStart(2, '0')}. [${fmtTime24(t.time)}] ${t.title}`);
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'session-' + (sess.start ? sess.start.slice(0, 10) : 'unknown') + '.txt';
+      a.click();
+    }
+
+    function fmtTime24(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ── Music Corrections ─────────────────────────────────────────────────────
+    async function loadCorrections(statusFilter) {
+      try {
+        const url = statusFilter ? `/api/music-db/corrections?status=${statusFilter}` : '/api/music-db/corrections';
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const { corrections } = await res.json();
+        renderCorrections(corrections);
+        // Highlight active filter button
+        document.getElementById('corr-filter-pending').classList.toggle('active', statusFilter === 'pending');
+        document.getElementById('corr-filter-all').classList.toggle('active', !statusFilter);
+      } catch {
+        document.getElementById('corrections-list').innerHTML = '<div class="empty">Failed to load</div>';
+      }
+    }
+
+    function renderCorrections(corrections) {
+      const el = document.getElementById('corrections-list');
+      if (!corrections.length) {
+        el.innerHTML = '<div class="empty">No corrections in this filter.</div>'; return;
+      }
+      el.innerHTML = corrections.map(c => {
+        const isPending = c.status === 'pending';
+        const actions = isPending ? `
+          <div class="corr-actions">
+            <button class="btn-accept-corr" onclick="resolveCorrection('${c.id}','accept')">✓ Accept</button>
+            <button class="btn-reject-corr" onclick="resolveCorrection('${c.id}','reject')">✗ Reject</button>
+          </div>` : `
+          <div style="margin-top:4px">
+            <span class="badge-resolved ${c.status === 'accepted' ? 'badge-accepted-corr' : 'badge-rejected-corr'}">
+              ${c.status.toUpperCase()}
+            </span>
+            <span style="color:#555;font-size:.75em;margin-left:6px">${c.resolvedAt ? fmtDate(c.resolvedAt) : ''}</span>
+          </div>`;
+        return `
+          <div class="correction-card">
+            <div class="corr-pair">
+              <span class="corr-original">"${esc(c.original)}"</span>
+              <span class="corr-arrow">→</span>
+              <span class="corr-canonical">"${esc(c.canonical)}"</span>
+            </div>
+            <div class="corr-meta">Submitted by ${esc(c.submittedBy)} · ${fmtDate(c.createdAt)}</div>
+            ${actions}
+          </div>`;
+      }).join('');
+    }
+
+    async function resolveCorrection(id, action) {
+      try {
+        const res = await fetch(`/api/music-db/corrections/${id}/${action}`, { method: 'PATCH' });
+        if (res.ok) {
+          toast(action === 'accept' ? 'Correction accepted — alias added to music DB' : 'Correction rejected');
+          loadCorrections();
+        } else toast('Failed', true);
+      } catch { toast('Network error', true); }
+    }
+
+    // ── Muted Users ───────────────────────────────────────────────────────────
+    async function loadMutedUsers() {
+      try {
+        const [usersRes, flaggedRes] = await Promise.all([
+          fetch('/admin/users'),
+          fetch('/api/admin/flagged-messages')
+        ]);
+        if (usersRes.status === 401) { window.location.href = '/admin-login.html'; return; }
+        const allUsers    = await usersRes.json();
+        const { flagged } = flaggedRes.ok ? await flaggedRes.json() : { flagged: {} };
+        renderMutedUsers(allUsers.filter(u => u.chatBanned), flagged);
+      } catch {
+        document.getElementById('muted-list').innerHTML = '<div class="empty">Failed to load</div>';
+      }
+    }
+
+    function renderMutedUsers(mutedUsers, flagged) {
+      const el = document.getElementById('muted-list');
+      if (!mutedUsers.length) {
+        el.innerHTML = '<div class="empty">No muted users.</div>'; return;
+      }
+      el.innerHTML = mutedUsers.map((u, i) => {
+        const record  = flagged[u.username];
+        const msgs    = record ? record.messages : [];
+        const bannedAt = record ? record.bannedAt : null;
+        const postBan  = msgs.filter(m => m.type === 'post-ban').length;
+        const msgRows  = msgs.map(m => `
+          <div class="flagged-msg">
+            <span class="${m.type === 'pre-ban' ? 'flag-type-pre' : 'flag-type-post'}">${m.type === 'pre-ban' ? 'pre-mute' : 'attempt'}</span>
+            <span class="flag-time">${fmtTime24(m.time)}</span>
+            <span class="flag-text">${esc(m.text)}</span>
+          </div>`).join('');
+        const msgLabel = msgs.length
+          ? `${msgs.length} message${msgs.length !== 1 ? 's' : ''}${postBan ? ` · ${postBan} attempt${postBan !== 1 ? 's' : ''} after mute` : ''}`
+          : 'No captured messages';
+        return `
+          <div class="muted-card">
+            <div class="muted-head">
+              <div class="muted-head-left">
+                <span class="muted-username">${esc(u.username)}</span>
+                <span class="muted-date">Muted ${bannedAt ? fmtDate(bannedAt) : '—'}</span>
+                ${msgs.length ? `<button class="show-msgs-btn" onclick="toggleMutedMsgs(${i})">▶ ${msgLabel}</button>` : `<span class="muted-date">${msgLabel}</span>`}
+              </div>
+              <button class="btn-unmute" onclick="unmuteUser('${esc(u.username)}')">Unmute</button>
+            </div>
+            ${msgs.length ? `<div class="muted-msgs" id="muted-msgs-${i}">${msgRows}</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function toggleMutedMsgs(i) {
+      const el = document.getElementById('muted-msgs-' + i);
+      if (!el) return;
+      el.classList.toggle('open');
+    }
+
+    async function unmuteUser(username) {
+      if (!confirm(`Unmute "${username}"? They will be able to chat again.`)) return;
+      try {
+        const res = await fetch(`/api/admin/chat-ban/${encodeURIComponent(username)}`, { method: 'DELETE' });
+        if (res.ok) { toast(`${username} unmuted`); loadMutedUsers(); loadUsers(); }
+        else toast('Failed', true);
+      } catch { toast('Network error', true); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

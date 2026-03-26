@@ -219,11 +219,22 @@
         <label>PASSWORD</label>
         <input type="password" id="reg-pass" placeholder="Choose a password (min 6 chars)" autocomplete="new-password">
       </div>
+      <div class="form-group" id="invite-field" style="display:none">
+        <label>INVITE CODE</label>
+        <input type="text" id="reg-invite" placeholder="Enter your invite code"
+          autocomplete="off" style="text-transform:uppercase;letter-spacing:2px">
+      </div>
       <button class="btn" id="reg-btn" onclick="doRegister()">CREATE ACCOUNT</button>
     </div>
 
     <div class="free-badge">
       FREE for 6 months after registration — no payment needed now
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <a href="/watch.html?guest=1"
+         style="color:#555;font-size:.78em;text-decoration:none;border-bottom:1px dashed #333;padding-bottom:1px">
+        Continue as Guest (read-only)
+      </a>
     </div>
   </div>
 
@@ -275,12 +286,25 @@
       }
     }
 
+    // Check invite mode on page load
+    let inviteOnly = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/invite-mode');
+        const d = await r.json();
+        inviteOnly = d.inviteOnly;
+        if (inviteOnly) document.getElementById('invite-field').style.display = 'block';
+      } catch {}
+    })();
+
     async function doRegister() {
-      const btn = document.getElementById('reg-btn');
-      const username = document.getElementById('reg-user').value.trim();
-      const password = document.getElementById('reg-pass').value;
+      const btn        = document.getElementById('reg-btn');
+      const username   = document.getElementById('reg-user').value.trim();
+      const password   = document.getElementById('reg-pass').value;
+      const inviteCode = document.getElementById('reg-invite').value.trim().toUpperCase();
 
       if (!username || !password) return showMsg('Please fill in all fields', 'error');
+      if (inviteOnly && !inviteCode) return showMsg('An invite code is required', 'error');
 
       btn.disabled = true;
       btn.textContent = 'Creating account...';
@@ -289,7 +313,7 @@
         const res = await fetch('/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
+          body: JSON.stringify({ username, password, inviteCode: inviteCode || undefined })
         });
         const data = await res.json();
 

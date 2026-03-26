@@ -9,7 +9,29 @@ let streamTitle   = 'DJ Live Session';
 let browserIsLive = false;
 let currentRecordingFile = null;
 let sessionStartTime     = null;
-let setlist              = [];   // [{ title, time }]
+let setlist              = [];   // [{ title, time }] — current session only
+
+// ── Persistent session history ────────────────────────────────────────────────
+const HISTORY_PATH = path.join(__dirname, '../data/session-history.json');
+
+function loadSessionHistory() {
+  if (!fs.existsSync(HISTORY_PATH)) return [];
+  try { return JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8')); } catch { return []; }
+}
+
+function saveSessionToHistory(start, tracks) {
+  if (!tracks.length) return;   // skip empty sessions
+  const history = loadSessionHistory();
+  history.unshift({ start, tracks });             // newest first
+  if (history.length > 100) history.length = 100; // keep last 100 sessions
+  try {
+    const tmp = HISTORY_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(history, null, 2));
+    fs.renameSync(tmp, HISTORY_PATH);
+  } catch (e) { console.error('[HISTORY] Save failed:', e.message); }
+}
+
+function getSessionHistory() { return loadSessionHistory(); }
 
 function getStreamTitle()      { return streamTitle; }
 function setStreamTitle(t) {
@@ -46,9 +68,16 @@ function setupStreamWS(wss) {
     startFFmpeg();
 
     ws.on('message', (chunk) => {
-      if (ffmpegProc && ffmpegProc.stdin.writable) {
-        try { ffmpegProc.stdin.write(chunk); } catch (_) {}
-      }
+      if (!ffmpegProc || !ffmpegProc.stdin.writable) return;
+      try {
+        // write() returns false when the internal buffer is full (backpressure).
+        // Pause WebSocket reads until FFmpeg drains its buffer to avoid unbounded memory growth.
+        const ok = ffmpegProc.stdin.write(chunk);
+        if (!ok) {
+          ws.pause();
+          ffmpegProc.stdin.once('drain', () => { try { ws.resume(); } catch (_) {} });
+        }
+      } catch (_) {}
     });
 
     ws.on('close', () => {
@@ -146,7 +175,10 @@ function stopFFmpeg() {
   if (ffmpegProc) {
     try { ffmpegProc.stdin.end(); } catch (_) {}
     const proc = ffmpegProc;
-    setTimeout(() => { try { proc.kill('SIGTERM'); } catch (_) {} }, 2000);
+    // Give FFmpeg 3s to flush + finalize the recording, then force-kill if still running
+    const killTimer = setTimeout(() => { try { proc.kill('SIGTERM'); } catch (_) {} }, 3000);
+    // Cancel the force-kill if FFmpeg exits cleanly on its own
+    proc.once('close', () => clearTimeout(killTimer));
     ffmpegProc = null;
   }
   browserIsLive = false;
@@ -154,6 +186,12 @@ function stopFFmpeg() {
     console.log('[REC] Session saved:', currentRecordingFile);
     currentRecordingFile = null;
   }
+  // Persist this session's setlist to history
+  if (sessionStartTime && setlist.length) {
+    saveSessionToHistory(sessionStartTime, [...setlist]);
+  }
+  sessionStartTime = null;
+  setlist = [];
 }
 
 // Called by server graceful-shutdown — stops FFmpeg cleanly before process exits
@@ -164,4 +202,5 @@ module.exports = {
   isDJConnected, isBrowserLive,
   getCurrentRecording, getSessionStartTime,
   getSetlist, clearSetlist, stopFFmpegOnExit,
+  getSessionHistory,
 };

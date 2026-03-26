@@ -20,6 +20,7 @@
     "node-media-server": "^2.6.2",
     "stripe": "^20.4.1",
     "uuid": "^9.0.0",
+    "web-push": "^3.6.7",
     "ws": "^8.20.0"
   },
   "devDependencies": {

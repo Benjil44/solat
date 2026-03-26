@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ff4500">
+<link rel="manifest" href="/manifest.json">
 <title>DJ Broadcast Studio</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -52,6 +54,13 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 /* ── Waveform / visualizer ── */
 .waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden;cursor:pointer}
 canvas.waveform{display:block;width:100%;height:60px}
+
+/* Waveform zoom indicator */
+.zoom-wrap{position:relative}
+.zoom-badge{position:absolute;top:3px;right:5px;background:rgba(0,0,0,.7);
+  color:#888;font-size:.65em;padding:1px 5px;border-radius:3px;pointer-events:none;
+  letter-spacing:.5px;z-index:2}
+.zoom-badge.zoomed{color:var(--yellow)}
 
 /* ── Transport controls ── */
 .transport{display:flex;align-items:center;gap:8px}
@@ -179,11 +188,16 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .drawer-pin:hover{border-color:#888;color:#ccc}
 .drawer-pin.pinned{border-color:var(--accent);color:var(--accent);background:#1a0800}
 .chat-messages{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:5px}
-.chat-msg{font-size:.82em;line-height:1.4;word-break:break-word}
+.chat-msg{font-size:.82em;line-height:1.4;word-break:break-word;position:relative}
 .chat-msg .who{font-weight:bold;margin-right:6px}
 .chat-msg.dj .who{color:var(--accent)}
 .chat-msg.viewer .who{color:#88aaff}
 .chat-msg.system{color:var(--muted);font-style:italic}
+.mute-btn{opacity:0;background:transparent;border:none;cursor:pointer;
+  padding:0 3px;font-size:.8em;vertical-align:middle;color:#666;
+  transition:opacity .15s;line-height:1}
+.chat-msg:hover .mute-btn{opacity:1}
+.mute-btn:hover{color:#ff4444}
 .chat-input-row{display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0}
 .chat-input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);
   border-radius:7px;color:#fff;font-size:.85em;outline:none}
@@ -212,6 +226,33 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .cue-btn.set0{border-color:#ffcc00;color:#ffcc00;background:#1a1600}
 .cue-btn.set1{border-color:#00ccff;color:#00ccff;background:#001820}
 .cue-btn.set2{border-color:#44ff88;color:#44ff88;background:#001a0a}
+.cue-btn.set3{border-color:#ff66cc;color:#ff66cc;background:#1a0015}
+
+/* ── Loop points ── */
+.loop-row{display:flex;gap:5px;margin-top:2px}
+.loop-btn{
+  flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
+  font-weight:bold;letter-spacing:.5px;transition:.1s;white-space:nowrap;
+  text-align:center;min-width:0}
+.loop-btn:hover{border-color:#666;color:#aaa}
+.loop-btn:active{transform:scale(.93)}
+.loop-btn.has-in,.loop-btn.has-out{border-color:#44ff88;color:#44ff88;background:#001a0a}
+.loop-btn.loop-ready{border-color:#44ff8866;color:#44ff8899}
+.loop-btn.loop-on{border-color:#44ff88;color:#fff;background:#003318;animation:loop-pulse 1s ease-in-out infinite}
+@keyframes loop-pulse{0%,100%{box-shadow:0 0 0 0 rgba(68,255,136,.35)}50%{box-shadow:0 0 0 5px rgba(68,255,136,0)}}
+
+/* ── Loop roll ── */
+.roll-row{display:flex;gap:4px;margin-top:2px}
+.roll-btn{
+  flex:1;padding:4px 2px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#555;cursor:pointer;font-size:.68em;
+  font-weight:bold;text-align:center;min-width:0;user-select:none;
+  transition:background .1s,border-color .1s}
+.roll-btn:hover{border-color:#ff9900;color:#ff9900}
+.roll-btn.rolling{border-color:#ff9900;background:#1a0e00;color:#ff9900;
+  animation:roll-flash .25s ease-in-out infinite alternate}
+@keyframes roll-flash{from{background:#1a0e00}to{background:#2a1800}}
 
 /* ── Effects ── */
 .fx-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
@@ -262,14 +303,81 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .setlist-time{color:var(--muted);font-size:.75em;min-width:46px;flex-shrink:0}
 .setlist-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
 
+/* ── Requests panel ── */
+.requests-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  margin:0 10px 10px;overflow:hidden}
+.req-panel-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;cursor:pointer;user-select:none;background:#161616;
+  border-bottom:1px solid transparent;transition:.15s}
+.req-panel-hdr:hover{background:#1c1c1c}
+.req-panel-hdr.open{border-bottom-color:var(--border)}
+.req-panel-title{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
+  text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.req-panel-badge{background:var(--accent);color:#fff;border-radius:10px;
+  padding:1px 7px;font-size:.85em;letter-spacing:0;display:none}
+.req-panel-badge.show{display:inline-block}
+.req-panel-actions{display:flex;gap:6px;align-items:center}
+.req-clear-btn{padding:3px 9px;background:transparent;border:1px solid #333;
+  color:#555;border-radius:5px;cursor:pointer;font-size:.72em}
+.req-clear-btn:hover{border-color:#888;color:#aaa}
+.req-panel-arrow{color:var(--muted);font-size:.75em;transition:transform .2s}
+.req-panel-arrow.open{transform:rotate(90deg)}
+.req-panel-body{display:none;max-height:260px;overflow-y:auto}
+.req-panel-body.open{display:block}
+.dj-req-row{display:flex;flex-direction:column;gap:5px;padding:8px 12px;
+  border-bottom:1px solid #1a1a1a}
+.dj-req-row:last-child{border-bottom:none}
+.dj-req-top{display:flex;align-items:center;gap:8px}
+.dj-req-votes{font-size:.75em;font-weight:bold;color:var(--accent);
+  min-width:28px;text-align:center}
+.dj-req-title{flex:1;font-size:.82em;color:#ddd;font-weight:bold;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dj-req-by{font-size:.7em;color:#555;padding-left:36px}
+.dj-req-btns{display:flex;gap:5px;flex-wrap:wrap;padding-left:36px}
+.djrb{padding:3px 9px;border-radius:5px;cursor:pointer;font-size:.72em;
+  font-weight:bold;border:1px solid;transition:.12s;white-space:nowrap}
+.djrb-a{background:#001a33;border-color:#4488ff;color:#4488ff}
+.djrb-a:hover{background:#002244}
+.djrb-b{background:#1a0800;border-color:var(--accent);color:var(--accent)}
+.djrb-b:hover{background:#2a1000}
+.djrb-accept{background:#001a0a;border-color:var(--green);color:var(--green)}
+.djrb-accept:hover{background:#002a12}
+.djrb-played{background:#1a1a00;border-color:var(--yellow);color:var(--yellow)}
+.djrb-played:hover{background:#2a2a00}
+.djrb-del{background:transparent;border-color:#444;color:#666}
+.djrb-del:hover{border-color:#ff4444;color:#ff4444}
+.dj-req-status{font-size:.68em;font-weight:bold;padding:1px 7px;border-radius:10px;flex-shrink:0}
+.drs-accepted{background:#003318;color:var(--green)}
+.drs-played{background:#1a1a00;color:#888}
+.drs-rejected{background:#1a0000;color:#666}
+.req-panel-empty{color:var(--muted);font-size:.82em;text-align:center;padding:18px 0}
+.dj-correct-form{display:flex;gap:5px;align-items:center;padding:5px 0 2px 36px;flex-wrap:wrap}
+.dj-correct-input{flex:1;min-width:120px;padding:4px 8px;background:var(--bg);
+  border:1px solid #444;border-radius:5px;color:#fff;font-size:.78em;outline:none}
+.dj-correct-input:focus{border-color:var(--green)}
+
 /* BPM display */
 .bpm-row{display:flex;align-items:center;gap:8px;font-size:.8em}
 .bpm-lbl{color:var(--muted);font-size:.75em;text-transform:uppercase;letter-spacing:1px}
 .bpm-val{color:var(--yellow);font-weight:bold;min-width:38px}
+/* Key display */
+.key-row{display:flex;align-items:center;gap:8px;font-size:.8em;margin-top:2px}
+.key-val{color:#88ccff;font-weight:bold;min-width:50px;font-size:.9em}
 .tap-btn{padding:3px 10px;background:var(--panel);border:1px solid var(--border);
   color:#aaa;border-radius:5px;cursor:pointer;font-size:.78em;letter-spacing:1px;transition:.1s}
 .tap-btn:hover{border-color:var(--yellow);color:var(--yellow)}
 .tap-btn:active{background:#1a1600;border-color:var(--yellow);transform:scale(.94)}
+
+/* Sync / nudge */
+.sync-btn{padding:3px 10px;background:var(--panel);border:1px solid var(--border);
+  color:#aaa;border-radius:5px;cursor:pointer;font-size:.78em;letter-spacing:1px;transition:.1s}
+.sync-btn:hover{border-color:var(--green);color:var(--green)}
+.sync-btn:active{background:#001a0a;border-color:var(--green);transform:scale(.94)}
+.sync-btn.synced{border-color:var(--green);color:var(--green);background:#001a0a}
+.nudge-btn{padding:3px 7px;background:var(--panel);border:1px solid var(--border);
+  color:#888;border-radius:5px;cursor:pointer;font-size:.78em;transition:.1s}
+.nudge-btn:hover{border-color:#aaa;color:#ddd}
+.nudge-btn:active{transform:scale(.9)}
 
 /* Record mix button */
 .record-btn{width:100%;padding:10px;border:1px solid #333;border-radius:8px;
@@ -281,9 +389,64 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .rec-timer{font-size:.78em;color:#ff4444;text-align:center;min-height:16px;
   letter-spacing:1px;margin-top:2px}
 
+/* Schedule */
+.sched-row{display:flex;gap:6px;align-items:center;margin-top:6px}
+.sched-row input[type=datetime-local]{flex:1;padding:7px 10px;background:var(--bg);
+  border:1px solid var(--border);border-radius:7px;color:#ccc;font-size:.8em;outline:none;
+  color-scheme:dark}
+.sched-row input:focus{border-color:var(--accent)}
+.sched-lbl{font-size:.72em;color:#666;text-align:center;margin-top:2px}
+
 /* Toast */
 #toast{position:fixed;bottom:20px;right:20px;background:#222;border:1px solid var(--accent);
   color:#fff;padding:10px 18px;border-radius:8px;font-size:.85em;display:none;z-index:999}
+
+/* ── Sample Pads ── */
+.samplepad-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin:0 10px 10px}
+.samplepad-hdr{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.samplepad-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
+  text-transform:uppercase}
+.samplepad-body{display:none;margin-top:12px;
+  display:none;grid-template-columns:repeat(4,1fr);gap:8px}
+.samplepad-body.open{display:grid}
+.pad{background:#111;border:2px solid #252525;border-radius:8px;padding:10px 6px;
+  text-align:center;cursor:pointer;position:relative;transition:background .08s,border-color .08s;
+  min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.pad:hover{border-color:#3a3a3a}
+.pad.loaded{border-color:#334}
+.pad.flash{background:#0a2a0a !important;border-color:#44ff44 !important}
+.pad-key{font-size:.62em;color:var(--muted);font-weight:bold;letter-spacing:1px}
+.pad-name{font-size:.7em;color:#999;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:88%;line-height:1.3}
+.pad-file-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+/* ── Play Queue Panel ── */
+.queue-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin:0 10px 10px}
+.queue-hdr{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.queue-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:#22bb44;
+  text-transform:uppercase}
+.queue-empty{color:var(--muted);font-size:.82em;text-align:center;padding:12px 0}
+.queue-item{display:flex;align-items:center;gap:6px;padding:6px 8px;
+  background:#0a140a;border:1px solid #1a2e1a;border-radius:7px;margin-bottom:4px}
+.queue-pos{color:var(--muted);font-size:.72em;min-width:16px;text-align:right;flex-shrink:0}
+.queue-title{flex:1;font-size:.8em;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;color:#ccc}
+.queue-votes{font-size:.7em;color:#666;flex-shrink:0}
+.qb{padding:2px 7px;border-radius:4px;cursor:pointer;font-size:.7em;font-weight:bold;
+  border:1px solid;background:transparent;transition:.12s;white-space:nowrap;flex-shrink:0}
+.qb:disabled{opacity:.3;cursor:default}
+.qb-up,.qb-dn{border-color:#333;color:#666}
+.qb-up:not(:disabled):hover,.qb-dn:not(:disabled):hover{border-color:#aaa;color:#ddd}
+.qb-a{border-color:#4488ff;color:#4488ff}
+.qb-a:hover{background:#001a33}
+.qb-b{border-color:var(--accent);color:var(--accent)}
+.qb-b:hover{background:#1a0800}
+.qb-played{border-color:#cc9900;color:#cc9900}
+.qb-played:hover{background:#1a1400}
+.qb-del{border-color:#333;color:#555}
+.qb-del:hover{border-color:#ff4444;color:#ff4444}
 
 /* ── Playlist Panel ── */
 .playlist-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
@@ -363,21 +526,62 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     display:flex;flex-direction:column;gap:8px
   }
 
-  .deck{padding:10px;gap:8px}
-  input.eq-knob{height:56px}
-  .t-btn{width:40px;height:40px}
-  .t-btn.play-btn{width:46px;height:46px;font-size:1.2em}
+  /* Deck */
+  .deck{padding:10px;gap:7px}
   .load-area{padding:10px}
 
+  /* Waveform taller on mobile for easier tap-seeking */
+  canvas.waveform{height:48px}
+
+  /* Transport — bigger touch targets */
+  .transport{gap:6px}
+  .t-btn{width:44px;height:44px;font-size:1.1em}
+  .t-btn.play-btn{width:52px;height:52px;font-size:1.35em}
+  .time-display{font-size:.72em}
+
+  /* EQ — horizontal knobs instead of vertical */
+  input.eq-knob{writing-mode:horizontal-tb;direction:ltr;width:100%;height:28px}
+  .eq-row{gap:5px}
+  .eq-col{gap:2px}
+  .eq-val{font-size:.68em}
+
+  /* BPM row — hide nudge on very small screens, keep tap+sync */
+  .bpm-row{flex-wrap:wrap;gap:5px}
+  .nudge-btn{display:none}
+
+  /* Cue + loop rows — slightly smaller text */
+  .cue-btn,.loop-btn{font-size:.68em;padding:5px 2px}
+
+  /* FX row — wrap and compress */
+  .fx-row{gap:4px}
+  .fx-btn{padding:4px 7px;font-size:.72em}
+
+  /* Meter bars — hide on mobile (save space) */
+  .meter-row{display:none}
+
+  /* Speed slider label hidden */
+  .speed-wrap>span:first-child{display:none}
+
+  /* Center column */
   .cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .title-row{flex-direction:column}
   .title-btn{align-self:flex-end;padding:7px 20px}
+  /* Hide OBS panel toggle on mobile — DJ usually uses phone for streaming only */
+  .obs-toggle{font-size:.75em;padding:6px}
 
+  /* Playlist */
   .playlist-panel{margin:0 8px 8px;padding:10px}
-  #playlist-tracks{max-height:160px}
+  #playlist-tracks{max-height:140px}
   .pl-deck-btn{display:none}
   .autodj-row{margin-left:0;width:100%}
-  .dj-chat-drawer.open{width:240px}
+  .xfade-lbl{display:none}
+
+  /* Setlist */
+  .setlist-card{margin:0 8px 8px;padding:10px}
+  #setlist-items{max-height:120px}
+
+  /* Chat drawer */
+  .dj-chat-drawer.open{width:260px}
 }
 </style>
 </head>
@@ -417,11 +621,19 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span class="bpm-lbl">BPM</span>
       <span class="bpm-val" id="bpmA">—</span>
       <button class="tap-btn" onclick="tapTempo('A')">TAP</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('A',-0.005)" title="Slow down slightly">◀</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('A', 0.005)" title="Speed up slightly">▶</button>
+      <button class="sync-btn" id="syncBtnA" onclick="syncBPM('A')" title="Match this deck's BPM to Deck B">SYNC</button>
+    </div>
+    <div class="key-row">
+      <span class="bpm-lbl">KEY</span>
+      <span class="key-val" id="keyA">—</span>
     </div>
 
     <!-- Waveform -->
-    <div class="waveform-wrap" onclick="seekDeckByClick(event,'A')">
+    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'A')" onwheel="zoomWaveform(event,'A')">
       <canvas class="waveform" id="waveformA" height="60"></canvas>
+      <span class="zoom-badge" id="zoomBadgeA">1×</span>
     </div>
 
     <!-- Transport -->
@@ -487,6 +699,28 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="cue-btn" id="cueA0" onclick="triggerCue('A',0)" oncontextmenu="clearCue(event,'A',0)" title="Click: set/jump · Right-click: clear">CUE 1</button>
       <button class="cue-btn" id="cueA1" onclick="triggerCue('A',1)" oncontextmenu="clearCue(event,'A',1)" title="Click: set/jump · Right-click: clear">CUE 2</button>
       <button class="cue-btn" id="cueA2" onclick="triggerCue('A',2)" oncontextmenu="clearCue(event,'A',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
+      <button class="cue-btn" id="cueA3" onclick="triggerCue('A',3)" oncontextmenu="clearCue(event,'A',3)" title="Click: set/jump · Right-click: clear">CUE 4</button>
+    </div>
+    <!-- Loop points -->
+    <div class="loop-row">
+      <button class="loop-btn" id="loopInA" onclick="setLoopIn('A')" oncontextmenu="clearLoopIn(event,'A')" title="Set loop in · Right-click: clear">IN</button>
+      <button class="loop-btn" id="loopBtnA" onclick="toggleLoop('A')" title="Toggle loop (L)">LOOP</button>
+      <button class="loop-btn" id="loopOutA" onclick="setLoopOut('A')" oncontextmenu="clearLoopOut(event,'A')" title="Set loop out · Right-click: clear">OUT</button>
+    </div>
+    <!-- Loop roll -->
+    <div class="roll-row">
+      <button class="roll-btn" id="rollA0"
+        onpointerdown="startRoll('A',0.25)" onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+        title="Hold: loop 1/4 bar · Release: continue">¼</button>
+      <button class="roll-btn" id="rollA1"
+        onpointerdown="startRoll('A',0.5)"  onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+        title="Hold: loop ½ bar · Release: continue">½</button>
+      <button class="roll-btn" id="rollA2"
+        onpointerdown="startRoll('A',1)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+        title="Hold: loop 1 bar · Release: continue">1</button>
+      <button class="roll-btn" id="rollA3"
+        onpointerdown="startRoll('A',2)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+        title="Hold: loop 2 bars · Release: continue">2</button>
     </div>
   </div>
 
@@ -539,12 +773,25 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <input class="title-input" type="url" id="coverUrl"
           placeholder="Cover image URL (optional)..." maxlength="500">
       </div>
+      <div class="title-row">
+        <input class="title-input" type="text" id="nextTrackInput"
+          placeholder="Next track (teaser for viewers)..." maxlength="120">
+        <button class="title-btn" onclick="updateNextTrack()">Next</button>
+      </div>
 
       <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
         ● GO LIVE
       </button>
       <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
       <div class="rec-timer" id="recTimer"></div>
+
+      <!-- Go-live schedule -->
+      <div class="sched-row">
+        <input type="datetime-local" id="schedInput" title="Schedule a go-live time for viewers">
+        <button class="title-btn" onclick="setSchedule()">📅 Set</button>
+        <button class="title-btn" onclick="clearSched()" title="Clear schedule" style="padding:7px 10px">✕</button>
+      </div>
+      <div class="sched-lbl" id="schedLbl"></div>
 
       <!-- OBS Setup -->
       <button class="obs-toggle" onclick="toggleOBSPanel()">🎛 OBS / External Source</button>
@@ -571,6 +818,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <div class="kb-row"><span class="kb-key">M</span><span class="kb-desc">Toggle monitor mute</span></div>
         <div class="kb-row"><span class="kb-key">R</span><span class="kb-desc">Toggle mix recording</span></div>
         <div class="kb-row"><span class="kb-key">1 2 3</span><span class="kb-desc">Set / jump to cue on active deck</span></div>
+        <div class="kb-row"><span class="kb-key">[</span><span class="kb-desc">Set loop in on active deck</span></div>
+        <div class="kb-row"><span class="kb-key">]</span><span class="kb-desc">Set loop out on active deck</span></div>
+        <div class="kb-row"><span class="kb-key">L</span><span class="kb-desc">Toggle loop on active deck</span></div>
+        <div class="kb-row"><span class="kb-key">Z X C V B N M ,</span><span class="kb-desc">Trigger sample pads 1–8</span></div>
       </div>
     </div>
 
@@ -590,10 +841,18 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span class="bpm-lbl">BPM</span>
       <span class="bpm-val" id="bpmB">—</span>
       <button class="tap-btn" onclick="tapTempo('B')">TAP</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('B',-0.005)" title="Slow down slightly">◀</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('B', 0.005)" title="Speed up slightly">▶</button>
+      <button class="sync-btn" id="syncBtnB" onclick="syncBPM('B')" title="Match this deck's BPM to Deck A">SYNC</button>
+    </div>
+    <div class="key-row">
+      <span class="bpm-lbl">KEY</span>
+      <span class="key-val" id="keyB">—</span>
     </div>
 
-    <div class="waveform-wrap" onclick="seekDeckByClick(event,'B')">
+    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'B')" onwheel="zoomWaveform(event,'B')">
       <canvas class="waveform" id="waveformB" height="60"></canvas>
+      <span class="zoom-badge" id="zoomBadgeB">1×</span>
     </div>
 
     <div class="transport">
@@ -653,6 +912,28 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="cue-btn" id="cueB0" onclick="triggerCue('B',0)" oncontextmenu="clearCue(event,'B',0)" title="Click: set/jump · Right-click: clear">CUE 1</button>
       <button class="cue-btn" id="cueB1" onclick="triggerCue('B',1)" oncontextmenu="clearCue(event,'B',1)" title="Click: set/jump · Right-click: clear">CUE 2</button>
       <button class="cue-btn" id="cueB2" onclick="triggerCue('B',2)" oncontextmenu="clearCue(event,'B',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
+      <button class="cue-btn" id="cueB3" onclick="triggerCue('B',3)" oncontextmenu="clearCue(event,'B',3)" title="Click: set/jump · Right-click: clear">CUE 4</button>
+    </div>
+    <!-- Loop points -->
+    <div class="loop-row">
+      <button class="loop-btn" id="loopInB" onclick="setLoopIn('B')" oncontextmenu="clearLoopIn(event,'B')" title="Set loop in · Right-click: clear">IN</button>
+      <button class="loop-btn" id="loopBtnB" onclick="toggleLoop('B')" title="Toggle loop (L)">LOOP</button>
+      <button class="loop-btn" id="loopOutB" onclick="setLoopOut('B')" oncontextmenu="clearLoopOut(event,'B')" title="Set loop out · Right-click: clear">OUT</button>
+    </div>
+    <!-- Loop roll -->
+    <div class="roll-row">
+      <button class="roll-btn" id="rollB0"
+        onpointerdown="startRoll('B',0.25)" onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+        title="Hold: loop 1/4 bar · Release: continue">¼</button>
+      <button class="roll-btn" id="rollB1"
+        onpointerdown="startRoll('B',0.5)"  onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+        title="Hold: loop ½ bar · Release: continue">½</button>
+      <button class="roll-btn" id="rollB2"
+        onpointerdown="startRoll('B',1)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+        title="Hold: loop 1 bar · Release: continue">1</button>
+      <button class="roll-btn" id="rollB3"
+        onpointerdown="startRoll('B',2)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+        title="Hold: loop 2 bars · Release: continue">2</button>
     </div>
   </div>
 
@@ -691,6 +972,43 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   </div>
   <div id="setlist-items">
     <div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>
+  </div>
+</div>
+
+<!-- ═══ SAMPLE PADS ═══ -->
+<div class="samplepad-panel">
+  <div class="samplepad-hdr" onclick="toggleSamplePad()">
+    <span class="samplepad-lbl">Sample Pads</span>
+    <span style="font-size:.72em;color:var(--muted);margin-left:4px">Z X C V B N M ,</span>
+    <span id="samplepad-arrow" style="margin-left:auto;font-size:.75em;color:#444">▶</span>
+  </div>
+  <div class="samplepad-body" id="samplepad-body"></div>
+</div>
+
+<!-- ═══ PLAY QUEUE ═══ -->
+<div class="queue-panel" id="queue-panel">
+  <div class="queue-hdr">
+    <span class="queue-lbl">Play Queue</span>
+    <span id="queue-count" style="font-size:.72em;color:var(--muted);margin-left:4px">0</span>
+    <span style="margin-left:auto;font-size:.72em;color:var(--muted)">accepted requests · auto-loads when DJ is on</span>
+  </div>
+  <div id="queue-list"><div class="queue-empty">No accepted requests — accept requests below to build queue</div></div>
+</div>
+
+<!-- ═══ REQUESTS PANEL ═══ -->
+<div class="requests-panel" id="requests-panel">
+  <div class="req-panel-hdr" id="req-panel-hdr" onclick="toggleReqPanel()">
+    <span class="req-panel-title">
+      🎤 Requests
+      <span class="req-panel-badge" id="req-panel-badge"></span>
+    </span>
+    <div class="req-panel-actions">
+      <button class="req-clear-btn" onclick="event.stopPropagation();djClearRequests()">Clear played</button>
+      <span class="req-panel-arrow" id="req-panel-arrow">▶</span>
+    </div>
+  </div>
+  <div class="req-panel-body" id="req-panel-body">
+    <div id="dj-req-list"><div class="req-panel-empty">No requests yet</div></div>
   </div>
 </div>
 
@@ -813,7 +1131,10 @@ function makeDeck() {
     startTime: 0, pauseOffset: 0,
     playing: false, duration: 0,
     fx: { echo: false, lowpass: false, reverb: false },
-    cues: [null, null, null]
+    cues:   [null, null, null, null],
+    loop:   { in: null, out: null, active: false },
+    zoom:   1,    // 1 = full view, up to 16 = zoomed in 16×
+    _plIdx: null  // index into playlist[] if loaded from playlist
   };
 }
 
@@ -875,7 +1196,10 @@ function decodeFile(file, id) {
       document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
       drawWaveform(buffer, id);
       resetCues(id);
+      resetLoop(id);
       setTimeout(() => showBPM(id, detectBPM(buffer)), 0);
+      showKey(id, null);
+      detectKey(buffer).then(k => showKey(id, k));
       toast('Loaded: ' + file.name.slice(0, 40));
       // If a manual fade was waiting for this deck, trigger it now
       if (pendingFadeTo !== null && (pendingFadeTo === 1 ? 'B' : 'A') === id) {
@@ -1039,6 +1363,13 @@ function updateTimers() {
   for (const id of ['A', 'B']) {
     const d = decks[id];
     const elapsed = d.playing ? (audioCtx.currentTime - d.startTime) : d.pauseOffset;
+    // Loop boundary — jump back to loop.in when we cross loop.out
+    if (d.playing && d.loop.active && d.loop.in !== null && d.loop.out !== null) {
+      if (elapsed >= d.loop.out) {
+        playDeck(id, d.loop.in);
+        continue;
+      }
+    }
     document.getElementById('time' + id).textContent = fmt(elapsed) + ' / ' + fmt(d.duration);
     drawWaveformCursor(id, elapsed, d.duration);
   }
@@ -1050,65 +1381,124 @@ function drawWaveformCursor(id, elapsed, duration) {
   if (!deck.waveImg) return;
   const { grey, color, w, h } = deck.waveImg;
   const canvas = document.getElementById('waveform' + id);
-  if (canvas.width !== w) return;   // canvas resized — skip until next waveform draw
+  if (canvas.width !== w) return;
   const ctx = canvas.getContext('2d');
 
+  const zoom     = deck.zoom || 1;
   const progress = duration ? Math.min(Math.max(elapsed / duration, 0), 1) : 0;
-  const x = Math.floor(progress * w);
 
-  // Grey for played portion, full color for unplayed
-  if (x > 0)     ctx.putImageData(grey,  0, 0, 0, 0, x,     h);
-  if (x < w - 1) ctx.putImageData(color, 0, 0, x, 0, w - x, h);
+  if (zoom <= 1) {
+    // ── Full view ──────────────────────────────────────────────
+    const x = Math.floor(progress * w);
+    if (x > 0)     ctx.putImageData(grey,  0, 0, 0, 0, x,     h);
+    if (x < w - 1) ctx.putImageData(color, 0, 0, x, 0, w - x, h);
+    deck._viewStart = 0; deck._viewEnd = 1;
 
-  // Cursor line
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(x, 0);
-  ctx.lineTo(x, h);
-  ctx.stroke();
+    // Cursor line
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(x-5,0); ctx.lineTo(x+5,0); ctx.lineTo(x,9); ctx.closePath(); ctx.fill();
+  } else {
+    // ── Zoomed view — window of 1/zoom fraction centered on playhead ──
+    const winHalf = 0.5 / zoom;
+    let viewStart = Math.max(0, progress - winHalf);
+    let viewEnd   = viewStart + 1 / zoom;
+    if (viewEnd > 1) { viewEnd = 1; viewStart = Math.max(0, viewEnd - 1 / zoom); }
+    deck._viewStart = viewStart; deck._viewEnd = viewEnd;
 
-  // Triangle handle at top
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.moveTo(x - 5, 0);
-  ctx.lineTo(x + 5, 0);
-  ctx.lineTo(x, 9);
-  ctx.closePath();
-  ctx.fill();
+    // Draw the visible slice of grey/color at correct positions
+    const srcStart = Math.floor(viewStart * w);
+    const srcEnd   = Math.floor(viewEnd   * w);
+    const srcW     = srcEnd - srcStart;
+    if (srcW <= 0) return;
+    const scale = w / srcW;
 
-  // Cue point markers — colored vertical lines + bottom triangle
-  const deck = decks[id];
+    ctx.fillStyle = '#0d0d0d'; ctx.fillRect(0, 0, w, h);
+    // Scale the slice to fill the full canvas width
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = srcW; tempCanvas.height = h;
+    const tc = tempCanvas.getContext('2d');
+    const playX = Math.floor(progress * w);
+    if (playX > srcStart)     tc.putImageData(grey,  0, 0, srcStart, 0, playX - srcStart, h);
+    if (playX < srcEnd - 1)   tc.putImageData(color, 0, 0, playX,    0, srcEnd - playX,   h);
+    ctx.drawImage(tempCanvas, 0, 0, srcW, h, 0, 0, w, h);
+
+    // Cursor always at center-ish
+    const x = Math.floor((progress - viewStart) / (viewEnd - viewStart) * w);
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(x-5,0); ctx.lineTo(x+5,0); ctx.lineTo(x,9); ctx.closePath(); ctx.fill();
+  }
+
+  // Helper: convert a time-fraction [0,1] to a canvas X pixel, accounting for zoom window
+  const viewStart = deck._viewStart || 0;
+  const viewEnd   = deck._viewEnd   || 1;
+  function fracToX(frac) {
+    return Math.floor(((frac - viewStart) / (viewEnd - viewStart)) * w);
+  }
+  function inView(frac) { return frac >= viewStart && frac <= viewEnd; }
+
+  // Loop region — semi-transparent band between in/out points
+  const loop = deck.loop;
+  if (loop.in !== null && loop.out !== null && duration) {
+    const lf1 = loop.in  / duration;
+    const lf2 = loop.out / duration;
+    const lx1 = fracToX(Math.max(lf1, viewStart));
+    const lx2 = fracToX(Math.min(lf2, viewEnd));
+    if (lx2 > lx1) {
+      ctx.fillStyle = loop.active ? 'rgba(68,255,136,0.15)' : 'rgba(68,255,136,0.06)';
+      ctx.fillRect(lx1, 0, lx2 - lx1, h);
+    }
+    ctx.strokeStyle = '#44ff88'; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+    if (inView(lf1)) { ctx.beginPath(); ctx.moveTo(fracToX(lf1), 0); ctx.lineTo(fracToX(lf1), h); ctx.stroke(); }
+    if (inView(lf2)) { ctx.beginPath(); ctx.moveTo(fracToX(lf2), 0); ctx.lineTo(fracToX(lf2), h); ctx.stroke(); }
+  }
+
+  // Cue point markers
   for (let i = 0; i < 3; i++) {
     if (deck.cues[i] === null || !duration) continue;
-    const cx = Math.floor((deck.cues[i] / duration) * w);
-    ctx.strokeStyle = CUE_COLORS[i];
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(cx, 0);
-    ctx.lineTo(cx, h);
-    ctx.stroke();
+    const cf = deck.cues[i] / duration;
+    if (!inView(cf)) continue;
+    const cx = fracToX(cf);
+    ctx.strokeStyle = CUE_COLORS[i]; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
     ctx.setLineDash([]);
-    // Small upward triangle at bottom
     ctx.fillStyle = CUE_COLORS[i];
-    ctx.beginPath();
-    ctx.moveTo(cx - 4, h);
-    ctx.lineTo(cx + 4, h);
-    ctx.lineTo(cx, h - 8);
-    ctx.closePath();
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx-4,h); ctx.lineTo(cx+4,h); ctx.lineTo(cx,h-8); ctx.closePath(); ctx.fill();
   }
 }
 
 function seekDeckByClick(e, id) {
   const deck = decks[id];
   if (!deck.buffer) return;
-  const rect = e.currentTarget.getBoundingClientRect();
+  const rect  = e.currentTarget.getBoundingClientRect();
   const ratio = (e.clientX - rect.left) / rect.width;
-  const newOffset = Math.max(0, Math.min(deck.duration, ratio * deck.duration));
+  // Map canvas ratio through the current zoom window to a track fraction
+  const viewStart = deck._viewStart || 0;
+  const viewEnd   = deck._viewEnd   || 1;
+  const trackFrac = viewStart + ratio * (viewEnd - viewStart);
+  const newOffset = Math.max(0, Math.min(deck.duration, trackFrac * deck.duration));
   deck.pauseOffset = newOffset;
   if (deck.playing) playDeck(id, newOffset);
+}
+
+function zoomWaveform(e, id) {
+  e.preventDefault();
+  const deck = decks[id];
+  if (!deck.buffer) return;
+  const LEVELS = [1, 2, 4, 8, 16];
+  const cur  = LEVELS.indexOf(deck.zoom || 1);
+  const next = e.deltaY < 0
+    ? Math.min(cur + 1, LEVELS.length - 1)  // scroll up = zoom in
+    : Math.max(cur - 1, 0);                  // scroll down = zoom out
+  deck.zoom = LEVELS[next];
+  const badge = document.getElementById('zoomBadge' + id);
+  if (badge) {
+    badge.textContent = deck.zoom + '×';
+    badge.classList.toggle('zoomed', deck.zoom > 1);
+  }
 }
 function fmt(s) {
   s = Math.max(0, Math.min(s || 0, 99 * 60 + 59));
@@ -1418,6 +1808,11 @@ function connectChat() {
   wsChat.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
+      if (msg.type === 'requests') {
+        renderDJRequests(msg.requests);
+        renderQueue(msg.queue || []);
+        return;
+      }
       if (msg.type === 'history') {
         msg.messages.forEach(m => appendChat(m));
       } else {
@@ -1437,7 +1832,10 @@ function appendChat(msg) {
   if (msg.type === 'system') {
     div.textContent = msg.text;
   } else {
-    div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}`;
+    const muteBtn = !msg.isDJ
+      ? `<button class="mute-btn" onclick="chatMuteUser('${esc(msg.username)}')" title="Mute user">🚫</button>`
+      : '';
+    div.innerHTML = `<span class="who">${esc(msg.username)}</span>${muteBtn}<span style="margin-left:4px">${esc(msg.text)}</span>`;
   }
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
@@ -1605,9 +2003,69 @@ async function updateTitle() {
     headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
     body: JSON.stringify({ title, cover })
   });
-  if (res.ok) { toast('Track updated'); setTimeout(fetchSetlist, 300); }
-  else toast('Failed to update', true);
+  if (res.ok) {
+    document.getElementById('nextTrackInput').value = '';
+    toast('Track updated');
+    setTimeout(fetchSetlist, 300);
+  } else toast('Failed to update', true);
 }
+
+async function updateNextTrack() {
+  const title = document.getElementById('nextTrackInput').value.trim();
+  const res = await fetch('/api/admin/next-track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ title })
+  });
+  if (res.ok) toast(title ? `Next track set: ${title}` : 'Next track cleared');
+  else toast('Failed', true);
+}
+
+async function setSchedule() {
+  const val = document.getElementById('schedInput').value;
+  if (!val) return toast('Pick a date/time first', true);
+  const scheduledAt = new Date(val).toISOString();
+  const res = await fetch('/api/admin/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ scheduledAt })
+  });
+  if (res.ok) {
+    const d = new Date(scheduledAt);
+    document.getElementById('schedLbl').textContent =
+      'Scheduled: ' + d.toLocaleString();
+    toast('Schedule set — viewers will see a countdown');
+  } else toast('Failed to set schedule', true);
+}
+
+async function clearSched() {
+  await fetch('/api/admin/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ scheduledAt: null })
+  });
+  document.getElementById('schedInput').value = '';
+  document.getElementById('schedLbl').textContent = '';
+  toast('Schedule cleared');
+}
+
+// Load current schedule on page open
+(async () => {
+  try {
+    const r = await fetch('/api/schedule');
+    const d = await r.json();
+    if (d.scheduledAt) {
+      // Populate the input with local datetime
+      const dt = new Date(d.scheduledAt);
+      // datetime-local format: YYYY-MM-DDTHH:MM
+      const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 16);
+      document.getElementById('schedInput').value = local;
+      document.getElementById('schedLbl').textContent =
+        'Scheduled: ' + dt.toLocaleString();
+    }
+  } catch {}
+})();
 
 async function pollStatus() {
   try {
@@ -1774,10 +2232,23 @@ function loadPlaylistTrack(idx, deckId) {
   deck.buffer   = t.buffer;
   deck.duration = t.duration;
   deck.pauseOffset = 0;
+  deck._plIdx   = idx;          // remember playlist source for cue memory
   document.getElementById('trackName' + deckId).textContent = t.name;
   drawWaveform(t.buffer, deckId);
-  resetCues(deckId);
+  // Restore saved cue points from playlist track, or clear them
+  if (t.cues) {
+    deck.cues = [...t.cues];
+    for (let i = 0; i < 4; i++) {
+      const btn = document.getElementById('cue' + deckId + i);
+      if (btn) btn.className = 'cue-btn' + (t.cues[i] != null ? ' set' + i : '');
+    }
+  } else {
+    resetCues(deckId);
+  }
+  resetLoop(deckId);
   setTimeout(() => showBPM(deckId, detectBPM(t.buffer)), 0);
+  showKey(deckId, null);
+  detectKey(t.buffer).then(k => showKey(deckId, k));
 }
 
 function plItemDblClick(e, idx) {
@@ -2032,6 +2503,11 @@ function autoDJTick() {
   const remaining = deck.duration - elapsed;
 
   if (remaining <= autoDJCrossfadeTime) {
+    // If queue has entries, pull from it first
+    if (_djQueue.length > 0) {
+      startAutoDJTransitionFromQueue(_djQueue[0]);
+      return;
+    }
     const nextIdx = autoDJCurrentIdx + 1;
     if (nextIdx >= playlist.length) {
       if (remaining <= 0.2) stopAutoDJ();
@@ -2074,6 +2550,35 @@ function startAutoDJTransition(nextIdx) {
 
       const el = document.getElementById('pl-item-' + nextIdx);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, 80);
+}
+
+function startAutoDJTransitionFromQueue(req) {
+  autoDJTransitioning = true;
+  const fromDeck = autoDJActiveDeck;
+  const toDeck   = fromDeck === 'A' ? 'B' : 'A';
+  // Try to find the track in playlist by title match
+  const lower = req.title.toLowerCase();
+  const idx = playlist.findIndex(t => {
+    const name = t.name.toLowerCase().replace(/\.[^.]+$/, '');
+    return name.includes(lower) || lower.includes(name);
+  });
+  if (idx !== -1 && (!decks[toDeck].buffer || decks[toDeck].buffer !== playlist[idx].buffer)) {
+    loadPlaylistTrack(idx, toDeck);
+  }
+  const fromVal = fromDeck === 'A' ? 0 : 1;
+  const toVal   = fromDeck === 'A' ? 1 : 0;
+  setCfAutoStatus('Queue: ' + req.title.slice(0, 22));
+  setTimeout(() => {
+    playDeck(toDeck, 0);
+    animateCrossfader(fromVal, toVal, autoDJCrossfadeTime, async () => {
+      stopDeck(fromDeck);
+      autoDJActiveDeck    = toDeck;
+      autoDJTransitioning = false;
+      setCfAutoStatus('');
+      await djReqStatus(req.id, 'played'); // WS broadcast removes from _djQueue
+      renderPlaylist();
     });
   }, 80);
 }
@@ -2146,7 +2651,7 @@ function animateCrossfader(from, to, durationSec, onDone) {
 //  CUE POINTS
 // ═══════════════════════════════════════════════════════════════
 const CUE_COLORS  = ['#ffcc00', '#00ccff', '#44ff88'];
-const CUE_CLASSES = ['set0', 'set1', 'set2'];
+const CUE_CLASSES = ['set0', 'set1', 'set2', 'set3'];
 
 function triggerCue(id, idx) {
   const deck = decks[id];
@@ -2159,6 +2664,11 @@ function triggerCue(id, idx) {
       : deck.pauseOffset;
     deck.cues[idx] = Math.min(deck.duration, pos);
     updateCueBtn(id, idx);
+    // Persist to playlist track so cues survive re-loads
+    if (deck._plIdx != null && playlist[deck._plIdx]) {
+      if (!playlist[deck._plIdx].cues) playlist[deck._plIdx].cues = [null,null,null,null];
+      playlist[deck._plIdx].cues[idx] = deck.cues[idx];
+    }
     toast(`Cue ${idx + 1} set at ${fmt(deck.cues[idx])}`);
   } else {
     // Cue already set — jump to it
@@ -2172,6 +2682,9 @@ function clearCue(e, id, idx) {
   e.preventDefault();
   decks[id].cues[idx] = null;
   updateCueBtn(id, idx);
+  if (decks[id]._plIdx != null && playlist[decks[id]._plIdx]) {
+    if (playlist[decks[id]._plIdx].cues) playlist[decks[id]._plIdx].cues[idx] = null;
+  }
   toast(`Cue ${idx + 1} cleared`);
 }
 
@@ -2189,10 +2702,161 @@ function updateCueBtn(id, idx) {
 }
 
 function resetCues(id) {
-  decks[id].cues = [null, null, null];
-  updateCueBtn(id, 0);
-  updateCueBtn(id, 1);
-  updateCueBtn(id, 2);
+  decks[id].cues   = [null, null, null, null];
+  decks[id]._plIdx = null;
+  for (let i = 0; i < 4; i++) updateCueBtn(id, i);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOOP POINTS
+// ═══════════════════════════════════════════════════════════════
+function setLoopIn(id) {
+  const deck = decks[id];
+  if (!deck.buffer) { toast('Load a track first'); return; }
+  const pos = deck.playing ? Math.max(0, audioCtx.currentTime - deck.startTime) : deck.pauseOffset;
+  deck.loop.in = Math.min(deck.duration, pos);
+  // If out is already set but now before in, clear it
+  if (deck.loop.out !== null && deck.loop.in >= deck.loop.out) {
+    deck.loop.out = null;
+    deck.loop.active = false;
+  }
+  updateLoopBtns(id);
+  toast('Loop in: ' + fmt(deck.loop.in));
+}
+
+function setLoopOut(id) {
+  const deck = decks[id];
+  if (!deck.buffer) { toast('Load a track first'); return; }
+  if (deck.loop.in === null) { toast('Set loop in first'); return; }
+  const pos = deck.playing ? Math.max(0, audioCtx.currentTime - deck.startTime) : deck.pauseOffset;
+  deck.loop.out = Math.min(deck.duration, pos);
+  if (deck.loop.out <= deck.loop.in) {
+    deck.loop.out = null;
+    deck.loop.active = false;
+    updateLoopBtns(id);
+    toast('Loop out must be after loop in', true);
+    return;
+  }
+  updateLoopBtns(id);
+  toast('Loop out: ' + fmt(deck.loop.out));
+}
+
+function toggleLoop(id) {
+  const deck = decks[id];
+  if (!deck.buffer) { toast('Load a track first'); return; }
+  if (deck.loop.in === null || deck.loop.out === null) { toast('Set loop in and out first'); return; }
+  deck.loop.active = !deck.loop.active;
+  updateLoopBtns(id);
+  toast(deck.loop.active ? 'Loop ON' : 'Loop OFF');
+}
+
+function clearLoopIn(e, id) {
+  e.preventDefault();
+  decks[id].loop.in = null;
+  decks[id].loop.active = false;
+  updateLoopBtns(id);
+  toast('Loop in cleared');
+}
+
+function clearLoopOut(e, id) {
+  e.preventDefault();
+  decks[id].loop.out = null;
+  decks[id].loop.active = false;
+  updateLoopBtns(id);
+  toast('Loop out cleared');
+}
+
+function updateLoopBtns(id) {
+  const loop = decks[id].loop;
+
+  const inBtn = document.getElementById('loopIn' + id);
+  if (inBtn) {
+    inBtn.className = 'loop-btn' + (loop.in !== null ? ' has-in' : '');
+    inBtn.textContent = loop.in !== null ? fmt(loop.in) : 'IN';
+  }
+
+  const outBtn = document.getElementById('loopOut' + id);
+  if (outBtn) {
+    outBtn.className = 'loop-btn' + (loop.out !== null ? ' has-out' : '');
+    outBtn.textContent = loop.out !== null ? fmt(loop.out) : 'OUT';
+  }
+
+  const loopBtn = document.getElementById('loopBtn' + id);
+  if (loopBtn) {
+    if (loop.active) {
+      loopBtn.className = 'loop-btn loop-on';
+      loopBtn.textContent = '⟳ LOOP';
+    } else if (loop.in !== null && loop.out !== null) {
+      loopBtn.className = 'loop-btn loop-ready';
+      loopBtn.textContent = 'LOOP';
+    } else {
+      loopBtn.className = 'loop-btn';
+      loopBtn.textContent = 'LOOP';
+    }
+  }
+}
+
+function resetLoop(id) {
+  decks[id].loop = { in: null, out: null, active: false };
+  updateLoopBtns(id);
+}
+
+// ── Loop Roll ─────────────────────────────────────────────────────────────────
+// Holds a short loop while the button is pressed; resumes at the original
+// playhead position when released (slip-mode simulation).
+
+const _roll = { A: null, B: null }; // state per deck
+
+function startRoll(id, bars) {
+  const deck = decks[id];
+  if (!deck.buffer || !deck.playing) return;
+
+  // Capture position at roll start (we'll resume here on release)
+  const pos = audioCtx.currentTime - deck.startTime;
+  _roll[id] = { resumePos: pos, bars };
+
+  // Calculate loop length from BPM if available, else 1 bar = 2s fallback
+  const bpm      = deck._bpm && deck._bpm > 0 ? deck._bpm : 120;
+  const barLen   = 60 / bpm * 4;              // 4 beats per bar
+  const loopLen  = barLen * bars;
+  const loopIn   = pos;
+  const loopOut  = Math.min(pos + loopLen, deck.duration);
+
+  // Override loop in/out and activate
+  deck.loop.in     = loopIn;
+  deck.loop.out    = loopOut;
+  deck.loop.active = true;
+  updateLoopBtns(id);
+
+  // Highlight the active roll button
+  const rollId = id === 'A' ? 'A' : 'B';
+  document.querySelectorAll(`[id^="roll${rollId}"]`).forEach(b => b.classList.remove('rolling'));
+  const barMap = { 0.25: 0, 0.5: 1, 1: 2, 2: 3 };
+  const btn = document.getElementById(`roll${rollId}${barMap[bars] ?? 0}`);
+  if (btn) btn.classList.add('rolling');
+}
+
+function stopRoll(id) {
+  const state = _roll[id];
+  if (!state) return;
+  _roll[id] = null;
+
+  const deck = decks[id];
+  // Deactivate loop
+  deck.loop.active = false;
+  updateLoopBtns(id);
+  // Clear roll button highlight
+  document.querySelectorAll(`[id^="roll${id}"]`).forEach(b => b.classList.remove('rolling'));
+  // Seek to where the audio would have been without the roll
+  // (slip: advance by the time elapsed during the roll)
+  // The loop was active, so estimate: elapsed = current - startTime (already at loopOut)
+  // For simplicity, resume at the position just past the loop (loopOut)
+  if (deck.playing && deck.loop.out != null) {
+    const resumePos = Math.min(state.resumePos + (deck.loop.out - deck.loop.in), deck.duration);
+    deck.pauseOffset = resumePos;
+    deck.loop.in = null; deck.loop.out = null;
+    playDeck(id, resumePos);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2245,7 +2909,94 @@ function detectBPM(buffer) {
 }
 
 function showBPM(id, bpm) {
+  decks[id]._bpm = (bpm != null && bpm !== '?') ? parseFloat(bpm) : null;
   document.getElementById('bpm' + id).textContent = bpm != null ? bpm + ' BPM' : '—';
+  // Clear synced state when BPM changes (track changed)
+  const btn = document.getElementById('syncBtn' + id);
+  if (btn) btn.classList.remove('synced');
+}
+
+// ── Key Detection (Krumhansl-Schmuckler) ──────────────────────────────────────
+const _KS_MAJ = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+const _KS_MIN = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+const _KEY_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+
+function _fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wR = Math.cos(ang), wI = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cR = 1, cI = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const uR = re[i+j], uI = im[i+j];
+        const vR = re[i+j+(len>>1)]*cR - im[i+j+(len>>1)]*cI;
+        const vI = re[i+j+(len>>1)]*cI + im[i+j+(len>>1)]*cR;
+        re[i+j]          = uR+vR; im[i+j]          = uI+vI;
+        re[i+j+(len>>1)] = uR-vR; im[i+j+(len>>1)] = uI-vI;
+        const nR = cR*wR - cI*wI; cI = cR*wI + cI*wR; cR = nR;
+      }
+    }
+  }
+}
+
+function detectKey(audioBuffer) {
+  return new Promise(resolve => setTimeout(() => {
+    try {
+      const sr  = audioBuffer.sampleRate;
+      const src = audioBuffer.getChannelData(0);
+      const N   = 65536;
+      const use = Math.min(src.length, sr * 20, N);
+      const re  = new Float32Array(N);
+      const im  = new Float32Array(N);
+      for (let i = 0; i < use; i++) {
+        const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / use));
+        re[i] = src[i] * w;
+      }
+      _fft(re, im);
+      const chroma = new Float32Array(12);
+      const binHz  = sr / N;
+      for (let k = 1; k < N >> 1; k++) {
+        const freq = k * binHz;
+        if (freq < 65 || freq > 4200) continue;
+        const pc = (((Math.round(12 * Math.log2(freq / 440) + 69)) % 12) + 12) % 12;
+        chroma[pc] += re[k]*re[k] + im[k]*im[k];
+      }
+      let mx = 0; for (let i = 0; i < 12; i++) if (chroma[i] > mx) mx = chroma[i];
+      if (mx > 0) for (let i = 0; i < 12; i++) chroma[i] /= mx;
+      const cMean = chroma.reduce((a,b) => a+b, 0) / 12;
+      let best = -2, bestRoot = 0, bestMode = 'maj';
+      for (let root = 0; root < 12; root++) {
+        for (const [prof, mode] of [[_KS_MAJ,'maj'],[_KS_MIN,'min']]) {
+          const pMean = prof.reduce((a,b) => a+b, 0) / 12;
+          let num = 0, d1 = 0, d2 = 0;
+          for (let i = 0; i < 12; i++) {
+            const ci = chroma[(i+root)%12] - cMean;
+            const pi = prof[i] - pMean;
+            num += ci*pi; d1 += ci*ci; d2 += pi*pi;
+          }
+          const score = d1 && d2 ? num / Math.sqrt(d1*d2) : 0;
+          if (score > best) { best = score; bestRoot = root; bestMode = mode; }
+        }
+      }
+      resolve(_KEY_NAMES[bestRoot] + ' ' + bestMode);
+    } catch { resolve(null); }
+  }, 0));
+}
+
+function showKey(id, key) {
+  const el = document.getElementById('key' + id);
+  if (el) el.textContent = key || '—';
+  if (decks[id]) decks[id]._key = key;
 }
 
 // Tap tempo
@@ -2264,6 +3015,49 @@ function tapTempo(id) {
   for (let i = 1; i < taps.length; i++) intervals.push(taps[i] - taps[i - 1]);
   const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
   showBPM(id, Math.round(60000 / avg));
+}
+
+// ── BPM Sync & Nudge ──────────────────────────────────────────
+function syncBPM(id) {
+  const other   = id === 'A' ? 'B' : 'A';
+  const myBPM   = decks[id]._bpm;
+  const theirBPM = decks[other]._bpm;
+
+  if (!myBPM || myBPM <= 0)    { toast('Detect BPM on Deck ' + id + ' first (load a track)'); return; }
+  if (!theirBPM || theirBPM <= 0) { toast('Detect BPM on Deck ' + other + ' first'); return; }
+
+  // Calculate the speed ratio needed to match the other deck's BPM
+  const ratio = theirBPM / myBPM;
+  // Clamp to the speed slider range [0.5, 2.0]
+  const newRate = Math.max(0.5, Math.min(2.0, ratio));
+
+  const slider = document.getElementById('speed' + id);
+  slider.value = newRate;
+  setSpeed(id, newRate);
+
+  const effectiveBPM = Math.round(myBPM * newRate);
+  showBPM(id, effectiveBPM);
+
+  const btn = document.getElementById('syncBtn' + id);
+  if (btn) btn.classList.add('synced');
+  toast(`Deck ${id} synced → ${effectiveBPM} BPM (${Math.round(newRate * 100)}%)`);
+}
+
+function nudgeSpeed(id, delta) {
+  const slider = document.getElementById('speed' + id);
+  const current = parseFloat(slider.value);
+  const next = Math.max(0.5, Math.min(2.0, Math.round((current + delta) * 1000) / 1000));
+  slider.value = next;
+  setSpeed(id, next);
+  // Update displayed BPM if we have a base BPM
+  if (decks[id]._bpm) {
+    const newBPM = Math.round(decks[id]._bpm * (next / (parseFloat(slider.dataset.baseRate) || 1)));
+    // Just update display label, not the stored _bpm
+    document.getElementById('bpm' + id).textContent = Math.round(decks[id]._bpm * next) + ' BPM';
+  }
+  // Clear synced indicator on manual nudge (now slightly off)
+  const btn = document.getElementById('syncBtn' + id);
+  if (btn) btn.classList.remove('synced');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2318,12 +3112,95 @@ document.addEventListener('keydown', (e) => {
       triggerCue(activeDeckCue, parseInt(e.key) - 1);
       break;
     }
+    case '[': {
+      if (e.ctrlKey || e.metaKey) break;
+      e.preventDefault();
+      setLoopIn(parseFloat(cf.value) < 0.5 ? 'A' : 'B');
+      break;
+    }
+    case ']': {
+      if (e.ctrlKey || e.metaKey) break;
+      e.preventDefault();
+      setLoopOut(parseFloat(cf.value) < 0.5 ? 'A' : 'B');
+      break;
+    }
+    case 'l': case 'L': {
+      if (e.ctrlKey || e.metaKey) break;
+      e.preventDefault();
+      toggleLoop(parseFloat(cf.value) < 0.5 ? 'A' : 'B');
+      break;
+    }
+    default: {
+      // Sample pad trigger keys: z x c v b n m ,
+      if (!e.ctrlKey && !e.metaKey) {
+        const padIdx = PAD_KEYS.indexOf(e.key.toLowerCase());
+        if (padIdx !== -1) { e.preventDefault(); triggerPad(padIdx); }
+      }
+    }
   }
 });
 
 function toggleKBPanel() {
   document.getElementById('kbPanel').classList.toggle('show');
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  SAMPLE PADS
+// ═══════════════════════════════════════════════════════════════
+const PAD_KEYS  = ['z','x','c','v','b','n','m',','];
+const PAD_COUNT = 8;
+const pads = Array.from({ length: PAD_COUNT }, () => ({ buffer: null, name: '' }));
+let _samplePadOpen = false;
+
+function toggleSamplePad() {
+  _samplePadOpen = !_samplePadOpen;
+  document.getElementById('samplepad-body').classList.toggle('open', _samplePadOpen);
+  document.getElementById('samplepad-arrow').textContent = _samplePadOpen ? '▼' : '▶';
+}
+
+function renderPads() {
+  const grid = document.getElementById('samplepad-body');
+  grid.innerHTML = pads.map((p, i) => `
+    <div class="pad${p.buffer ? ' loaded' : ''}" id="pad-${i}" onclick="triggerPad(${i})">
+      <input type="file" class="pad-file-input" accept="audio/*"
+        onchange="loadPad(event,${i})" onclick="event.stopPropagation()">
+      <div class="pad-key">${PAD_KEYS[i].toUpperCase()}</div>
+      <div class="pad-name" id="pad-name-${i}">${p.name ? esc(p.name) : '+ load'}</div>
+    </div>`
+  ).join('');
+}
+
+function loadPad(e, idx) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    try {
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      const buffer = await audioCtx.decodeAudioData(ev.target.result.slice(0));
+      pads[idx].buffer = buffer;
+      pads[idx].name   = file.name.replace(/\.[^.]+$/, '').slice(0, 18);
+      renderPads();
+      toast('Pad ' + (idx + 1) + ': ' + pads[idx].name);
+    } catch { toast('Could not decode audio file', true); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function triggerPad(idx) {
+  const pad = pads[idx];
+  if (!pad.buffer) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const src = audioCtx.createBufferSource();
+  src.buffer = pad.buffer;
+  src.connect(masterGain);  // routed through master gain → broadcast stream
+  src.start(0);
+  const el = document.getElementById('pad-' + idx);
+  if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 200); }
+}
+
+// Initialise pads
+renderPads();
 
 // ═══════════════════════════════════════════════════════════════
 //  INIT
@@ -2339,10 +3216,223 @@ if (!ADMIN_KEY) {
   connectChat();
   setInterval(pollStatus, 5000);
   pollStatus();
+  loadInitialDJRequests();
   // Resume audio context on first interaction
   document.addEventListener('click', () => {
     if (audioCtx.state === 'suspended') audioCtx.resume();
   }, { once: false });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  REQUESTS PANEL (DJ SIDE)
+// ═══════════════════════════════════════════════════════════════
+let _djReqPanelOpen = false;
+
+async function loadInitialDJRequests() {
+  try {
+    const res = await fetch('/api/requests', { headers: { 'x-admin-key': ADMIN_KEY } });
+    if (res.ok) { const d = await res.json(); renderDJRequests(d.requests); renderQueue(d.queue || []); }
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLAY QUEUE
+// ═══════════════════════════════════════════════════════════════
+let _djQueue = [];
+
+function renderQueue(queue) {
+  _djQueue = queue || [];
+  const el  = document.getElementById('queue-list');
+  const cnt = document.getElementById('queue-count');
+  cnt.textContent = _djQueue.length;
+  if (!_djQueue.length) {
+    el.innerHTML = '<div class="queue-empty">No accepted requests — accept requests below to build the queue</div>';
+    return;
+  }
+  el.innerHTML = _djQueue.map((r, i) => `
+    <div class="queue-item" id="qi-${r.id}">
+      <span class="queue-pos">${i + 1}</span>
+      <span class="queue-title" title="${esc(r.title)}">${esc(r.title)}</span>
+      <span class="queue-votes">★${r.votes}</span>
+      <button class="qb qb-up"    onclick="queueMove('${r.id}','up')"   ${i === 0 ? 'disabled' : ''}>▲</button>
+      <button class="qb qb-dn"    onclick="queueMove('${r.id}','down')" ${i === _djQueue.length - 1 ? 'disabled' : ''}>▼</button>
+      <button class="qb qb-a"     onclick="djLoadRequest('${esc(r.title)}','A')">→A</button>
+      <button class="qb qb-b"     onclick="djLoadRequest('${esc(r.title)}','B')">→B</button>
+      <button class="qb qb-played" onclick="djReqStatus('${r.id}','played')">✓ Played</button>
+      <button class="qb qb-del"   onclick="djRemoveRequest('${r.id}')">✕</button>
+    </div>`
+  ).join('');
+}
+
+async function queueMove(id, direction) {
+  try {
+    const res = await fetch(`/api/requests/${id}/move`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ direction })
+    });
+    if (!res.ok) toast('Could not reorder queue', true);
+  } catch { toast('Network error', true); }
+}
+
+function toggleReqPanel() {
+  _djReqPanelOpen = !_djReqPanelOpen;
+  document.getElementById('req-panel-hdr').classList.toggle('open', _djReqPanelOpen);
+  document.getElementById('req-panel-body').classList.toggle('open', _djReqPanelOpen);
+  document.getElementById('req-panel-arrow').classList.toggle('open', _djReqPanelOpen);
+  // Clear badge when opened
+  if (_djReqPanelOpen) {
+    const b = document.getElementById('req-panel-badge');
+    b.textContent = ''; b.classList.remove('show');
+  }
+}
+
+function renderDJRequests(reqs) {
+  const el = document.getElementById('dj-req-list');
+  const pending = reqs.filter(r => r.status === 'pending' || r.status === 'accepted');
+  const done    = reqs.filter(r => r.status === 'played' || r.status === 'rejected');
+
+  // Update badge (pending count)
+  const badge = document.getElementById('req-panel-badge');
+  if (pending.length > 0) {
+    badge.textContent = pending.length;
+    badge.classList.add('show');
+    if (!_djReqPanelOpen) {
+      // Auto-open panel on first request
+      if (pending.length === 1 && done.length === 0) toggleReqPanel();
+    }
+  } else {
+    badge.textContent = ''; badge.classList.remove('show');
+  }
+
+  if (!reqs.length) {
+    el.innerHTML = '<div class="req-panel-empty">No requests yet</div>'; return;
+  }
+
+  el.innerHTML = [...pending, ...done].map(r => {
+    const statusBadge = r.status === 'accepted'
+      ? '<span class="dj-req-status drs-accepted">ACCEPTED</span>'
+      : r.status === 'played'
+        ? '<span class="dj-req-status drs-played">PLAYED</span>'
+        : r.status === 'rejected'
+          ? '<span class="dj-req-status drs-rejected">SKIPPED</span>'
+          : '';
+    const id = r.id;
+    const isDone = r.status === 'played' || r.status === 'rejected';
+    const loadBtns = !isDone ? `
+      <button class="djrb djrb-a" onclick="djLoadRequest('${esc(r.title)}','A')">→A</button>
+      <button class="djrb djrb-b" onclick="djLoadRequest('${esc(r.title)}','B')">→B</button>` : '';
+    const acceptBtn = r.status === 'pending'
+      ? `<button class="djrb djrb-accept" onclick="djReqStatus('${id}','accepted')">✓ Accept</button>` : '';
+    const playedBtn = !isDone
+      ? `<button class="djrb djrb-played" onclick="djReqStatus('${id}','played')">✓ Played</button>` : '';
+    const fixBtn = !isDone
+      ? `<button class="djrb djrb-del" style="border-color:#777;color:#999" onclick="showDJCorrect('${id}','${esc(r.title)}')">✎ Fix</button>` : '';
+    return `
+      <div class="dj-req-row" id="djreq-${id}">
+        <div class="dj-req-top">
+          <span class="dj-req-votes">★${r.votes}</span>
+          <span class="dj-req-title" title="${esc(r.title)}">${esc(r.title)}</span>
+          ${statusBadge}
+        </div>
+        <div class="dj-req-by">by ${esc(r.requestedBy)}</div>
+        <div class="dj-req-btns">
+          ${loadBtns}${acceptBtn}${playedBtn}${fixBtn}
+          <button class="djrb djrb-del" onclick="djRemoveRequest('${id}')">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function djLoadRequest(title, deckId) {
+  // Search playlist for matching track (case-insensitive partial match)
+  const lowerTitle = title.toLowerCase();
+  const idx = playlist.findIndex(t => {
+    const name = t.name.toLowerCase().replace(/\.[^.]+$/, ''); // strip extension
+    return name.includes(lowerTitle) || lowerTitle.includes(name);
+  });
+  if (idx !== -1) {
+    loadPlaylistTrack(idx, deckId);
+    toast('Loading "' + playlist[idx].name.slice(0, 35) + '" → Deck ' + deckId);
+  } else {
+    navigator.clipboard.writeText(title).catch(() => {});
+    toast('Not in playlist — title copied: ' + title.slice(0, 40));
+  }
+}
+
+async function djReqStatus(id, status) {
+  try {
+    const res = await fetch(`/api/requests/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ status })
+    });
+    if (!res.ok) toast('Failed', true);
+  } catch { toast('Network error', true); }
+}
+
+async function djRemoveRequest(id) {
+  try {
+    await fetch(`/api/requests/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-key': ADMIN_KEY }
+    });
+  } catch {}
+}
+
+async function djClearRequests() {
+  try {
+    await fetch('/api/requests', { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  } catch {}
+}
+
+// ── Correction form (inline in request row) ───────────────────────────────────
+function showDJCorrect(id, originalTitle) {
+  const row = document.getElementById('djreq-' + id);
+  if (!row) return;
+  const existing = row.querySelector('.dj-correct-form');
+  if (existing) { existing.remove(); return; }   // toggle off
+
+  const form = document.createElement('div');
+  form.className = 'dj-correct-form';
+  form.innerHTML = `
+    <input class="dj-correct-input" type="text" value="${esc(originalTitle)}"
+      placeholder="Correct title..." onkeydown="if(event.key==='Enter')submitDJCorrection('${id}',this)">
+    <button class="djrb djrb-accept" onclick="submitDJCorrection('${id}',this.previousElementSibling)">Submit</button>
+    <button class="djrb djrb-del" onclick="this.closest('.dj-correct-form').remove()">✕</button>`;
+  row.appendChild(form);
+  form.querySelector('input').select();
+}
+
+async function submitDJCorrection(reqId, inputEl) {
+  const canonical = inputEl.value.trim();
+  if (!canonical) return;
+  const titleEl   = document.querySelector(`#djreq-${reqId} .dj-req-title`);
+  const original  = titleEl ? titleEl.textContent.trim() : canonical;
+  if (original.toLowerCase() === canonical.toLowerCase()) {
+    inputEl.closest('.dj-correct-form').remove(); return;
+  }
+  try {
+    const res = await fetch('/api/music-db/corrections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ original, canonical })
+    });
+    if (res.ok) { toast('Correction sent to admin for review'); inputEl.closest('.dj-correct-form').remove(); }
+    else toast('Failed to submit correction', true);
+  } catch { toast('Network error', true); }
+}
+
+// ── Chat mute ─────────────────────────────────────────────────────────────────
+async function chatMuteUser(username) {
+  if (!confirm(`Mute "${username}" from chat?\nThey can still request music but cannot send chat messages.`)) return;
+  try {
+    const res = await fetch(`/api/admin/chat-ban/${encodeURIComponent(username)}`, {
+      method: 'POST', headers: { 'x-admin-key': ADMIN_KEY }
+    });
+    if (res.ok) toast(`${username} muted from chat`);
+    else { const d = await res.json(); toast(d.error || 'Failed', true); }
+  } catch { toast('Network error', true); }
 }
 </script>
 </body>

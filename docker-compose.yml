@@ -1,0 +1,25 @@
+services:
+  dj-stream:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"    # Web / HLS
+      - "1935:1935"    # RTMP (OBS input)
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data              # user accounts, invite codes, session history
+      - ./media:/app/media            # HLS segments + recordings
+      - ./logs:/app/logs              # PM2-style logs (stdout/stderr)
+    healthcheck:
+      test: ["CMD", "node", "-e",
+        "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # Limit memory — prevents runaway FFmpeg from killing the host
+    deploy:
+      resources:
+        limits:
+          memory: 1g

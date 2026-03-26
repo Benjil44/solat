@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ff4500">
+  <link rel="manifest" href="/manifest.json">
   <title>DJ Live Stream</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <style>
@@ -33,6 +35,16 @@
     #viewer-badge.visible { display:flex; }
     #viewer-badge .vdot { width:7px; height:7px; border-radius:50%;
       background:var(--accent); animation:pulse 1.5s infinite; }
+    /* Stream health badge */
+    #health-badge { display:none; align-items:center; gap:4px; background:#0a1a0a;
+      border:1px solid #1a4a1a; border-radius:20px; padding:3px 9px; font-size:.72em;
+      color:#66bb66; white-space:nowrap; flex-shrink:0; }
+    #health-badge.visible { display:flex; }
+    #health-badge.degraded { border-color:#554400; color:#bbaa44; }
+    #health-badge.poor     { border-color:#440000; color:#bb4444; }
+    /* Chat message timestamp */
+    .msg-time { font-size:.75em; color:#444; margin-left:5px; }
+    .chat-msg:hover .msg-time { color:#666; }
     .user-info { display:flex; align-items:center; gap:10px; font-size:.82em; flex-shrink:0; }
     #sub-badge { padding:3px 9px; border-radius:20px; font-size:.75em; font-weight:bold; }
     .badge-trial   { background:#332200; color:#ffcc00; }
@@ -65,12 +77,21 @@
     #video-side { flex:1; position:relative; background:#000; display:flex; flex-direction:column; }
     #video-wrap  { flex:1; position:relative; display:flex; align-items:center; justify-content:center; }
 
-    /* Hidden video — still plays audio */
-    video { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+    /* Video element — fills the wrap, hidden until live */
+    video {
+      position:absolute; inset:0; width:100%; height:100%;
+      object-fit:contain; background:#000;
+      display:none; z-index:1;
+    }
+    video.visible { display:block; }
 
-    /* Now-playing display */
-    #now-playing { width:100%; height:100%; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; gap:22px; padding:20px; }
+    /* Now-playing display — shown when offline or artwork mode active */
+    #now-playing { position:absolute; inset:0; width:100%; height:100%;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:22px; padding:20px;
+      z-index:2; background:#000; transition:opacity .3s; }
+    #now-playing.hidden { opacity:0; pointer-events:none; }
+
     #cover-wrap { position:relative; width:min(280px,60vw); aspect-ratio:1;
       border-radius:16px; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.7); flex-shrink:0; }
     #cover-img { width:100%; height:100%; object-fit:cover; display:none; border-radius:16px; }
@@ -81,6 +102,10 @@
     #now-title { font-size:clamp(1em,3vw,1.6em); font-weight:900; text-align:center;
       color:#fff; letter-spacing:1px; max-width:400px; line-height:1.3; }
     #now-sub { font-size:.8em; color:#666; letter-spacing:2px; text-transform:uppercase; }
+    #next-track-bar { display:none; margin-top:8px; padding:5px 12px; border-radius:20px;
+      background:rgba(255,68,0,.12); border:1px solid rgba(255,68,0,.25);
+      font-size:.75em; color:#ff6622; letter-spacing:1px; text-align:center; max-width:340px; }
+    #next-track-bar span { color:#fff; font-weight:700; }
 
     /* Pulsing glow when live */
     #cover-wrap.live { animation:glow-pulse 2s ease-in-out infinite; }
@@ -88,6 +113,15 @@
       0%,100% { box-shadow:0 8px 40px rgba(255,68,0,.3); }
       50%      { box-shadow:0 8px 60px rgba(255,68,0,.7); }
     }
+
+    /* View-toggle button (video ↔ artwork) */
+    #view-toggle-btn {
+      background:transparent; border:1px solid #444; color:#ccc;
+      padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em;
+      display:none;
+    }
+    #view-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
+    #view-toggle-btn.show { display:inline-block; }
 
     /* overlay (offline / buffering / tap-to-play) */
     #overlay { position:absolute; inset:0; display:flex; flex-direction:column;
@@ -145,12 +179,27 @@
     #chat-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
     #chat-toggle-btn.active { border-color:var(--accent); color:var(--accent); background:#1a0800; }
 
-    /* ── Chat panel ── */
+    /* ── Chat/Request panel ── */
     #chat-panel { width:0; display:flex; flex-direction:column; background:var(--card);
       border-left:1px solid var(--border); transition:width .25s; overflow:hidden; flex-shrink:0; }
-    #chat-panel.open { width:280px; }
-    .chat-header { padding:10px 14px; border-bottom:1px solid var(--border);
-      font-size:.75em; font-weight:bold; color:#666; letter-spacing:1px; flex-shrink:0; }
+    #chat-panel.open { width:300px; }
+
+    /* Tab bar */
+    .panel-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .panel-tab { flex:1; padding:8px 4px; background:transparent; border:none; border-bottom:2px solid transparent;
+      color:#555; font-size:.72em; font-weight:bold; letter-spacing:.5px; cursor:pointer; position:relative;
+      text-transform:uppercase; transition:.15s; }
+    .panel-tab:hover { color:#aaa; }
+    .panel-tab.active { color:#fff; border-bottom-color:var(--accent); }
+    .tab-notif { position:absolute; top:5px; right:6px; width:7px; height:7px; border-radius:50%;
+      background:var(--accent); display:none; }
+    .tab-notif.show { display:block; }
+
+    /* Tab content */
+    .tab-pane { display:none; flex:1; flex-direction:column; overflow:hidden; }
+    .tab-pane.active { display:flex; }
+
+    /* Chat pane */
     #chat-messages { flex:1; overflow-y:auto; padding:10px 12px;
       display:flex; flex-direction:column; gap:5px; }
     .chat-msg { font-size:.8em; line-height:1.4; word-break:break-word; }
@@ -166,6 +215,78 @@
     .chat-send-btn { padding:7px 12px; background:var(--accent); border:none;
       color:#fff; border-radius:6px; cursor:pointer; font-size:.8em; font-weight:bold; }
     .chat-send-btn:hover { background:#e03d00; }
+
+    /* Requests pane */
+    .req-form { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .req-input { flex:1; padding:7px 10px; background:#0a0a0a; border:1px solid var(--border);
+      border-radius:6px; color:#fff; font-size:.82em; outline:none; }
+    .req-input:focus { border-color:var(--accent); }
+    .req-send-btn { padding:7px 10px; background:#1a0800; border:1px solid var(--accent);
+      color:var(--accent); border-radius:6px; cursor:pointer; font-size:.75em; font-weight:bold; white-space:nowrap; }
+    .req-send-btn:hover { background:#2a1000; }
+    #req-list { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:5px; }
+    .req-card { background:#0d0d0d; border:1px solid #1e1e1e; border-radius:8px; padding:8px 10px;
+      display:flex; gap:8px; align-items:flex-start; }
+    .req-card.accepted { border-color:#44aa66; }
+    .req-card.played   { opacity:.45; }
+    .req-card.rejected { opacity:.35; }
+    .req-vote { display:flex; flex-direction:column; align-items:center; flex-shrink:0;
+      gap:2px; min-width:30px; }
+    .req-vote-btn { background:transparent; border:1px solid #333; color:#555;
+      width:26px; height:22px; border-radius:4px; cursor:pointer; font-size:.75em;
+      display:flex; align-items:center; justify-content:center; transition:.15s; }
+    .req-vote-btn:hover { border-color:#aaa; color:#aaa; }
+    .req-vote-btn.voted { border-color:var(--accent); color:var(--accent); background:#1a0800; }
+    .req-vote-btn.own { cursor:default; }
+    .req-vote-count { font-size:.75em; color:#aaa; font-weight:bold; }
+    .req-body { flex:1; min-width:0; }
+    .req-title { font-size:.82em; color:#ddd; font-weight:bold; word-break:break-word; line-height:1.3; }
+    .req-meta { font-size:.72em; color:#555; margin-top:3px; }
+    .req-status-badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:.68em;
+      font-weight:bold; margin-left:6px; }
+    .rsb-accepted { background:#003318; color:#44ff88; }
+    .rsb-played   { background:#1a1a00; color:#888; }
+    .rsb-rejected { background:#1a0000; color:#666; }
+    .req-empty { padding:20px; text-align:center; color:#444; font-size:.82em; }
+    /* Emoji reactions on request cards */
+    .req-reactions { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+    .react-btn { background:none; border:1px solid #252525; border-radius:12px;
+      padding:2px 7px; font-size:.78em; cursor:pointer; color:#888;
+      transition:border-color .15s, background .15s; }
+    .react-btn:hover { border-color:#555; background:#1a1a1a; }
+    .react-btn.reacted { border-color:#ff6622; background:#1a0800; color:#ff9966; }
+    /* Floating chat reaction emojis over player */
+    .reaction-bar { display:flex; gap:6px; padding:5px 10px 0; flex-shrink:0;
+      border-top:1px solid var(--border); }
+    .react-chat-btn { background:none; border:1px solid #2a2a2a; border-radius:8px;
+      padding:4px 10px; font-size:1.1em; cursor:pointer; transition:border-color .15s, transform .1s; }
+    .react-chat-btn:hover { border-color:#555; transform:scale(1.15); }
+    @keyframes floatUp {
+      0%   { transform:translateY(0)     scale(1);   opacity:1; }
+      100% { transform:translateY(-160px) scale(1.8); opacity:0; }
+    }
+    .float-emoji { position:absolute; bottom:22%; font-size:2em; pointer-events:none;
+      z-index:20; animation:floatUp 2s ease-out forwards; }
+
+    /* Suggestion dropdown */
+    .req-form-wrap { position:relative; }
+    #req-suggestions { position:absolute; top:100%; left:0; right:0; z-index:50;
+      background:#111; border:1px solid #333; border-top:none;
+      border-radius:0 0 7px 7px; overflow:hidden; }
+    .req-sugg-label { padding:5px 10px 3px; font-size:.65em; color:#555; letter-spacing:1px; text-transform:uppercase; }
+    .req-sugg-item { padding:7px 12px; cursor:pointer; font-size:.8em; color:#ccc;
+      display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .req-sugg-item:hover { background:#1a1a1a; }
+    .req-sugg-pct { font-size:.72em; color:#555; white-space:nowrap; flex-shrink:0; }
+
+    /* Trending pane */
+    #trending-list { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
+    .trend-row { display:flex; align-items:center; gap:8px; padding:7px 10px;
+      background:#0d0d0d; border:1px solid #1a1a1a; border-radius:7px; }
+    .trend-rank { font-size:.7em; color:#555; min-width:18px; text-align:right; font-weight:bold; }
+    .trend-title { flex:1; font-size:.8em; color:#ccc; word-break:break-word; }
+    .trend-score { font-size:.72em; color:var(--accent); font-weight:bold; white-space:nowrap; }
+    .trend-empty { padding:20px; text-align:center; color:#444; font-size:.82em; }
 
     /* ── Trial expiry banner ── */
     #expiry-banner {
@@ -189,7 +310,7 @@
 
     /* Tablet: shrink chat panel */
     @media(max-width:900px){
-      #chat-panel.open { width:240px; }
+      #chat-panel.open { width:260px; }
     }
 
     /* Mobile: chat becomes full-screen overlay, compress top bar */
@@ -235,13 +356,23 @@
     <div id="stream-title-wrap">
       <span id="stream-title"></span>
       <span id="viewer-badge"><span class="vdot"></span><span id="viewer-count">0</span> watching</span>
+      <span id="health-badge">📶 <span id="health-text">HD</span></span>
     </div>
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
+      <button class="logout-btn" id="bell-btn" onclick="togglePushNotify()"
+              title="Notify me when DJ goes live" style="display:none">🔕</button>
       <button class="logout-btn" onclick="showChangePwd()">🔑</button>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
+  </div>
+
+  <!-- Guest banner -->
+  <div id="guest-banner" style="display:none;background:#1a0800;border-bottom:1px solid #ff4400;
+       padding:8px 16px;text-align:center;font-size:.82em;color:#ccc">
+    You're watching as a guest. <a href="/" style="color:#ff6622;font-weight:bold">Login or register</a>
+    to chat, request songs, and unlock all features.
   </div>
 
   <!-- Trial expiry warning -->
@@ -271,6 +402,7 @@
           </div>
           <div id="now-title">DJ Live Session</div>
           <div id="now-sub">LIVE STREAM</div>
+          <div id="next-track-bar">UP NEXT &nbsp;&#8250;&nbsp; <span id="next-track-title"></span></div>
         </div>
 
         <div id="overlay">
@@ -282,35 +414,86 @@
       <div id="bottombar">
         <span id="vol-label">Vol</span>
         <input type="range" id="volume" min="0" max="1" step="0.05" value="0.8"
-          oninput="setVolume(this.value)" id="volume">
-        <button id="chat-toggle-btn" onclick="toggleChat()">💬 Chat</button>
+          oninput="setVolume(this.value)">
+        <button id="view-toggle-btn" onclick="toggleView()">🎵 Artwork</button>
+        <button id="chat-toggle-btn" onclick="toggleChat()">💬 Chat/Requests</button>
         <button id="fullscreen-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
       </div>
     </div>
 
-    <!-- Chat panel -->
+    <!-- Side panel: Chat / Requests / Trending -->
     <div id="chat-panel">
-      <div class="chat-header">LIVE CHAT</div>
-      <div id="chat-messages"></div>
-      <div class="chat-input-row">
-        <input class="chat-input" id="chat-input" type="text"
-          placeholder="Say something..." maxlength="200"
-          onkeydown="if(event.key==='Enter')sendChat()">
-        <button class="chat-send-btn" onclick="sendChat()">→</button>
+      <!-- Panel top bar -->
+      <div style="display:flex;justify-content:flex-end;padding:6px 12px 0;flex-shrink:0">
+        <a href="/profile.html" style="font-size:.75em;color:#555;text-decoration:none;transition:.15s"
+           onmouseover="this.style.color='#ff4400'" onmouseout="this.style.color='#555'">My Profile →</a>
+      </div>
+      <!-- Tab bar -->
+      <div class="panel-tabs">
+        <button class="panel-tab active" id="tab-btn-chat"     onclick="switchTab('chat')">💬 Chat</button>
+        <button class="panel-tab"        id="tab-btn-requests" onclick="switchTab('requests')">
+          🎵 Requests<span class="tab-notif" id="req-notif"></span>
+        </button>
+        <button class="panel-tab"        id="tab-btn-trending" onclick="switchTab('trending')">🔥 Top</button>
+      </div>
+
+      <!-- Chat pane -->
+      <div class="tab-pane active" id="pane-chat">
+        <div id="chat-messages"></div>
+        <div class="reaction-bar">
+          <button class="react-chat-btn" onclick="sendReaction('🔥')" title="Fire">🔥</button>
+          <button class="react-chat-btn" onclick="sendReaction('❤️')" title="Love">❤️</button>
+          <button class="react-chat-btn" onclick="sendReaction('🎵')" title="Music">🎵</button>
+          <button class="react-chat-btn" onclick="sendReaction('👏')" title="Clap">👏</button>
+        </div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chat-input" type="text"
+            placeholder="Say something... or /request Song" maxlength="200"
+            onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="chat-send-btn" onclick="sendChat()">→</button>
+        </div>
+      </div>
+
+      <!-- Requests pane -->
+      <div class="tab-pane" id="pane-requests">
+        <div class="req-form-wrap">
+          <div class="req-form">
+            <input class="req-input" id="req-input" type="text"
+              placeholder="Artist – Song title..." maxlength="100"
+              oninput="onReqInput(this)"
+              onkeydown="if(event.key==='Enter'){hideSuggestions();submitRequest()}"
+              onblur="setTimeout(hideSuggestions,150)">
+            <button class="req-send-btn" onclick="submitRequest()">Request</button>
+          </div>
+          <div id="req-suggestions" style="display:none"></div>
+          <div id="req-error" style="display:none;color:#ff6622;font-size:.8em;padding:4px 2px"></div>
+        </div>
+        <div id="req-list"><div class="req-empty">No requests yet — be the first!</div></div>
+      </div>
+
+      <!-- Trending pane -->
+      <div class="tab-pane" id="pane-trending">
+        <div id="trending-list"><div class="trend-empty">Loading top tracks…</div></div>
       </div>
     </div>
 
   </div>
 
   <script>
-    const video    = document.getElementById('player');
-    const overlay  = document.getElementById('overlay');
+    const video     = document.getElementById('player');
+    const overlay   = document.getElementById('overlay');
     const liveBadge = document.getElementById('live-badge');
-    const bufBar   = document.getElementById('buf-bar');
+    const bufBar    = document.getElementById('buf-bar');
     let hls = null, pollTimer = null, heartbeatTimer = null, countdownInterval = null;
     let isPlaying = false, chatOpen = false, wsChat = null;
     let hlsErrCount = 0;
-    let userToken = null;
+    let userToken   = null;
+    let _scheduledAt = null; // upcoming go-live time from server
+    let videoMode   = true;  // true = show video feed, false = show artwork
+    let currentUsername = null;
+    let isGuestMode = false;
+    let activeTab   = 'chat';
+    let _requests   = [];
 
     // ── Volume persistence ────────────────────────────────────
     const savedVol = parseFloat(localStorage.getItem('djVol') ?? '0.8');
@@ -320,10 +503,20 @@
 
     // ── Init ─────────────────────────────────────────────────
     async function init() {
-      const res = await fetch('/auth/me');
-      if (!res.ok) { window.location.href = '/'; return; }
+      const res  = await fetch('/auth/me');
+      const isGuest = !res.ok || new URLSearchParams(location.search).has('guest');
+      if (isGuest) {
+        // Guest / unauthenticated mode — read-only
+        isGuestMode = true;
+        enterGuestMode();
+        pollStatus();
+        connectChat();
+        loadInitialRequests();
+        return;
+      }
       const data = await res.json();
 
+      currentUsername = data.username;
       document.getElementById('username-display').textContent = data.username;
       const badge = document.getElementById('sub-badge');
       if (data.subscription.type === 'trial') {
@@ -369,6 +562,86 @@
       pollStatus();
       heartbeatTimer = setInterval(() => fetch('/api/heartbeat', { method:'POST' }).catch(()=>{}), 15000);
       connectChat();
+      loadInitialRequests();
+      initPushNotifications();
+    }
+
+    // ── Guest mode ────────────────────────────────────────────
+    function enterGuestMode() {
+      // Topbar
+      const udisp = document.getElementById('username-display');
+      if (udisp) udisp.textContent = 'Guest';
+      const badge = document.getElementById('sub-badge');
+      if (badge) { badge.textContent = 'GUEST'; badge.className = 'badge-expired'; }
+      // Disable chat input
+      const chatInp = document.getElementById('chat-input');
+      if (chatInp) { chatInp.disabled = true; chatInp.placeholder = 'Login to chat'; }
+      document.querySelectorAll('.chat-send-btn, .react-chat-btn').forEach(b => b.disabled = true);
+      // Disable request input
+      const reqInp = document.getElementById('req-input');
+      if (reqInp) { reqInp.disabled = true; reqInp.placeholder = 'Login to request songs'; }
+      document.querySelectorAll('.req-send-btn').forEach(b => b.disabled = true);
+      // Show login CTA banner
+      const banner = document.getElementById('guest-banner');
+      if (banner) banner.style.display = 'block';
+    }
+
+    // ── Push notifications ────────────────────────────────────
+    let _pushSub = null;
+
+    async function initPushNotifications() {
+      if (isGuestMode) return;
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      try {
+        const kr = await fetch('/api/push/vapid-key');
+        if (!kr.ok) return;
+        const { publicKey } = await kr.json();
+        const reg = await navigator.serviceWorker.ready;
+        _pushSub  = await reg.pushManager.getSubscription();
+        updateBellBtn(_pushSub != null);
+        document.getElementById('bell-btn').style.display = 'inline-block';
+        window._vapidPublicKey = publicKey;
+      } catch {}
+    }
+
+    async function togglePushNotify() {
+      if (!('serviceWorker' in navigator)) return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (_pushSub) {
+          // Unsubscribe
+          await _pushSub.unsubscribe();
+          await fetch('/api/push/subscribe', { method: 'DELETE' });
+          _pushSub = null;
+          updateBellBtn(false);
+        } else {
+          // Subscribe
+          const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(window._vapidPublicKey)
+          });
+          await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sub)
+          });
+          _pushSub = sub;
+          updateBellBtn(true);
+        }
+      } catch (e) { console.warn('Push toggle failed:', e); }
+    }
+
+    function updateBellBtn(on) {
+      const btn = document.getElementById('bell-btn');
+      if (!btn) return;
+      btn.textContent = on ? '🔔' : '🔕';
+      btn.title = on ? 'Notifications ON — click to disable' : 'Notify me when DJ goes live';
+    }
+
+    function urlBase64ToUint8Array(b64) {
+      const pad = '='.repeat((4 - b64.length % 4) % 4);
+      const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
     }
 
     // ── Now-playing display ───────────────────────────────────
@@ -401,14 +674,38 @@
       }
     }
 
+    function updateNextTrack(title) {
+      const bar = document.getElementById('next-track-bar');
+      const span = document.getElementById('next-track-title');
+      if (title) {
+        span.textContent = title;
+        bar.style.display = 'block';
+      } else {
+        bar.style.display = 'none';
+        span.textContent = '';
+      }
+    }
+
     // ── Poll stream ───────────────────────────────────────────
     async function pollStatus() {
       try {
-        const res = await fetch('/api/status');
-        if (!res.ok) { scheduleNextPoll(); return; }
+        const res = await fetch(isGuestMode ? '/api/live' : '/api/status');
+        if (!res.ok) {
+          // 401/403 = session expired or suspended — redirect to login
+          if (res.status === 401 || res.status === 403) {
+            clearTimeout(pollTimer);
+            showSessionExpired();
+            return;
+          }
+          scheduleNextPoll(); return;
+        }
         const d = await res.json();
 
+        // Track scheduled go-live time for offline overlay countdown
+        _scheduledAt = d.scheduledAt || null;
+
         if (d.title) setNowPlaying(d.title, d.coverUrl || '');
+        updateNextTrack(d.nextTrack || null);
         // viewer badge
         const vb = document.getElementById('viewer-badge');
         if (d.live && d.viewers > 0) {
@@ -434,6 +731,16 @@
       clearTimeout(pollTimer);
       // Poll every 3s while offline, every 8s while playing (less pressure)
       pollTimer = setTimeout(pollStatus, isPlaying ? 8000 : 3000);
+    }
+
+    function showSessionExpired() {
+      stopStream();
+      const overlay = document.getElementById('overlay');
+      const title   = document.getElementById('overlay-title');
+      const sub     = document.getElementById('overlay-sub');
+      overlay.style.display = 'flex';
+      title.textContent = 'Session Expired';
+      sub.innerHTML = '<a href="/" style="color:#ff4400;text-decoration:underline">Click here to log in again</a>';
     }
 
     // ── HLS playback ──────────────────────────────────────────
@@ -505,6 +812,22 @@
         // Reset error counter every time a fragment loads successfully
         hls.on(Hls.Events.FRAG_LOADED, () => { hlsErrCount = 0; });
 
+        // Stream health badge — update on each fragment load
+        hls.on(Hls.Events.FRAG_BUFFERED, (_, data) => {
+          try {
+            const kbps = Math.round((data.frag.stats.total * 8) / (data.frag.duration * 1000));
+            const badge = document.getElementById('health-badge');
+            const text  = document.getElementById('health-text');
+            if (!badge || !text) return;
+            let label, cls;
+            if (kbps >= 1000) { label = `${(kbps/1000).toFixed(1)} Mbps`; cls = ''; }
+            else if (kbps >= 400) { label = `${kbps} kbps`; cls = 'degraded'; }
+            else { label = `${kbps} kbps`; cls = 'poor'; }
+            text.textContent = label;
+            badge.className = 'visible ' + cls;
+          } catch {}
+        });
+
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (!data.fatal) return;  // HLS.js handles non-fatal errors internally
           hlsErrCount++;
@@ -551,16 +874,45 @@
       video.src = '';
       isPlaying = false;
       liveBadge.style.display = 'none';
+      // Hide health badge when stream ends
+      const hb = document.getElementById('health-badge');
+      if (hb) hb.className = '';
+      // Reset to artwork view and hide the toggle
+      video.classList.remove('visible');
+      document.getElementById('now-playing').classList.remove('hidden');
+      document.getElementById('view-toggle-btn').classList.remove('show');
+      videoMode = true;  // next connect will default to video
       showOffline();
     }
 
     // ── Overlay helpers ───────────────────────────────────────
+    function fmtCountdown(ms) {
+      if (ms <= 0) return 'Starting soon…';
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60) % 60;
+      const h = Math.floor(s / 3600) % 24;
+      const d = Math.floor(s / 86400);
+      if (d > 0) return `in ${d}d ${h}h`;
+      if (h > 0) return `in ${h}h ${m}m`;
+      if (m > 0) return `in ${m}m ${s % 60}s`;
+      return `in ${s}s`;
+    }
+
     function showOffline() {
       clearInterval(countdownInterval);
       overlay.style.display = 'flex';
+
+      const hasSchedule = _scheduledAt && new Date(_scheduledAt).getTime() > Date.now() - 60000;
+      const schedStr = hasSchedule
+        ? `<div id="overlay-sched" style="color:#ff8844;font-size:.88em;margin-top:-6px">
+             🗓 Going live <span id="sched-cd">${fmtCountdown(new Date(_scheduledAt) - Date.now())}</span>
+           </div>`
+        : '';
+
       overlay.innerHTML = `
         <div class="vinyl slow"></div>
         <div id="overlay-title">DJ Offline</div>
+        ${schedStr}
         <div id="overlay-sub">We'll connect you automatically when the DJ goes live.</div>
         <div id="overlay-countdown">Checking soon…</div>`;
 
@@ -568,6 +920,9 @@
       const tick = () => {
         const el = document.getElementById('overlay-countdown');
         if (!el) { clearInterval(countdownInterval); return; }
+        // Update schedule countdown if present
+        const cd = document.getElementById('sched-cd');
+        if (cd && _scheduledAt) cd.textContent = fmtCountdown(new Date(_scheduledAt) - Date.now());
         el.textContent = secs > 0 ? `Checking in ${secs}s` : 'Checking…';
         if (--secs < 0) secs = isPlaying ? 7 : 2;
       };
@@ -600,7 +955,32 @@
         <div id="overlay-title">${title}</div>
         <div id="overlay-sub">${sub}</div>`;
     }
-    function hideOverlay() { clearInterval(countdownInterval); overlay.style.display = 'none'; }
+    function hideOverlay() {
+      clearInterval(countdownInterval);
+      overlay.style.display = 'none';
+      // Show the video feed and enable the view-toggle button
+      applyViewMode();
+      document.getElementById('view-toggle-btn').classList.add('show');
+    }
+
+    function applyViewMode() {
+      const nowPlaying = document.getElementById('now-playing');
+      if (videoMode) {
+        video.classList.add('visible');
+        nowPlaying.classList.add('hidden');
+        document.getElementById('view-toggle-btn').textContent = '🎵 Artwork';
+      } else {
+        video.classList.remove('visible');
+        nowPlaying.classList.remove('hidden');
+        document.getElementById('view-toggle-btn').textContent = '📺 Video';
+      }
+    }
+
+    function toggleView() {
+      videoMode = !videoMode;
+      applyViewMode();
+    }
+
     function manualPlay() { video.muted = false; video.play(); hideOverlay(); }
 
     // ── Controls ──────────────────────────────────────────────
@@ -669,13 +1049,28 @@
 
     // ── Chat ──────────────────────────────────────────────────
     function connectChat() {
-      if (!userToken) return;
+      if (!userToken && !isGuestMode) return;
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      wsChat = new WebSocket(`${proto}://${location.host}/ws/chat?token=${encodeURIComponent(userToken)}`);
+      const qs    = userToken ? `token=${encodeURIComponent(userToken)}` : 'guest=1';
+      wsChat = new WebSocket(`${proto}://${location.host}/ws/chat?${qs}`);
 
       wsChat.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+          // Request list broadcast
+          if (msg.type === 'requests') {
+            _requests = msg.requests;
+            if (activeTab === 'requests') {
+              renderRequests(_requests);
+            } else {
+              // Show notification dot if there are new pending requests
+              const hasPending = msg.requests.some(r => r.status === 'pending' || r.status === 'accepted');
+              if (hasPending) document.getElementById('req-notif').classList.add('show');
+            }
+            return;
+          }
+          if (msg.type === 'next-track') { updateNextTrack(msg.title); return; }
+          if (msg.type === 'reaction') { spawnReactionEmoji(msg.emoji); return; }
           if (msg.type === 'history') msg.messages.forEach(m => appendChat(m));
           else {
             appendChat(msg);
@@ -690,14 +1085,27 @@
       wsChat.onerror = () => {};
     }
 
+    function relTime(ts) {
+      if (!ts) return '';
+      const diff = Math.floor((Date.now() - ts) / 1000);
+      if (diff < 10)  return 'now';
+      if (diff < 60)  return diff + 's';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm';
+      return Math.floor(diff / 3600) + 'h';
+    }
+
     function appendChat(msg) {
       const el = document.getElementById('chat-messages');
       const div = document.createElement('div');
+      const ts = msg.time || Date.now();
       div.className = 'chat-msg ' + (msg.type === 'system' ? 'system' : (msg.isDJ ? 'dj' : 'viewer'));
+      div.dataset.ts = ts;
+      const exactTime = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeSpan = `<span class="msg-time" title="${exactTime}">${relTime(ts)}</span>`;
       if (msg.type === 'system') {
-        div.textContent = msg.text;
+        div.innerHTML = esc(msg.text) + timeSpan;
       } else {
-        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}`;
+        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}${timeSpan}`;
       }
       el.appendChild(div);
       el.scrollTop = el.scrollHeight;
@@ -709,6 +1117,15 @@
       }
     }
 
+    // Refresh relative timestamps every 60s
+    setInterval(() => {
+      document.querySelectorAll('.chat-msg[data-ts]').forEach(div => {
+        const ts = +div.dataset.ts;
+        const span = div.querySelector('.msg-time');
+        if (span) span.textContent = relTime(ts);
+      });
+    }, 60_000);
+
     function sendChat() {
       const input = document.getElementById('chat-input');
       const text  = input.value.trim();
@@ -717,9 +1134,9 @@
       input.value = '';
     }
 
-    // Clear notification dot when chat is opened
+    // Clear chat notification dot when chat panel is opened
     document.getElementById('chat-toggle-btn').addEventListener('click', () => {
-      document.getElementById('chat-toggle-btn').textContent = '💬 Chat';
+      document.getElementById('chat-toggle-btn').textContent = '💬 Chat/Requests';
     });
 
     function esc(s) {
@@ -727,7 +1144,199 @@
         c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    // ── Tab switching ────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      activeTab = tab;
+      ['chat','requests','trending'].forEach(t => {
+        document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
+        document.getElementById('pane-' + t).classList.toggle('active', t === tab);
+      });
+      if (tab === 'requests') {
+        document.getElementById('req-notif').classList.remove('show');
+        renderRequests(_requests);
+      }
+      if (tab === 'trending') loadTrending();
+    }
+
+    // ── Requests ─────────────────────────────────────────────────────────────
+    async function loadInitialRequests() {
+      try {
+        const res = await fetch('/api/requests');
+        if (res.ok) { const d = await res.json(); _requests = d.requests; renderRequests(_requests); }
+      } catch {}
+    }
+
+    const REQ_EMOJIS = ['🔥', '❤️', '👏'];
+
+    function renderRequests(reqs) {
+      const el = document.getElementById('req-list');
+      const pending = reqs.filter(r => r.status === 'pending' || r.status === 'accepted');
+      const done    = reqs.filter(r => r.status === 'played' || r.status === 'rejected');
+      const all = [...pending, ...done];
+      if (!all.length) {
+        el.innerHTML = '<div class="req-empty">No requests yet — be the first!</div>'; return;
+      }
+      el.innerHTML = all.map(r => {
+        const isOwn    = r.requestedBy === currentUsername;
+        const hasVoted = r.voters && r.voters.includes(currentUsername);
+        const canVote  = (r.status === 'pending' || r.status === 'accepted') && !isOwn;
+        const canReact = r.status === 'pending' || r.status === 'accepted';
+        const voteBtnClass = 'req-vote-btn' + (hasVoted ? ' voted' : '') + (isOwn ? ' own' : '');
+        const voteCb = canVote ? `onclick="toggleVote('${r.id}')"` : '';
+        const statusBadge = r.status === 'accepted'
+          ? '<span class="req-status-badge rsb-accepted">ACCEPTED</span>'
+          : r.status === 'played'
+            ? '<span class="req-status-badge rsb-played">PLAYED</span>'
+            : r.status === 'rejected'
+              ? '<span class="req-status-badge rsb-rejected">SKIPPED</span>'
+              : '';
+        const reactions = r.reactions || {};
+        const reactBtns = canReact
+          ? `<div class="req-reactions">${REQ_EMOJIS.map(e => {
+              const users  = reactions[e] || [];
+              const active = users.includes(currentUsername);
+              const count  = users.length;
+              return `<button class="react-btn${active ? ' reacted' : ''}"
+                onclick="toggleReact('${r.id}','${e}')">${e}${count > 0 ? ' ' + count : ''}</button>`;
+            }).join('')}</div>`
+          : '';
+        return `<div class="req-card ${r.status}">
+          <div class="req-vote">
+            <button class="${voteBtnClass}" ${voteCb} title="${canVote ? 'Upvote' : ''}">${hasVoted ? '▲' : '△'}</button>
+            <span class="req-vote-count">${r.votes}</span>
+          </div>
+          <div class="req-body">
+            <div class="req-title">${esc(r.title)}${statusBadge}</div>
+            <div class="req-meta">by ${isOwn ? '<em>you</em>' : esc(r.requestedBy)}</div>
+            ${reactBtns}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function showReqError(msg) {
+      const el = document.getElementById('req-error');
+      el.textContent = msg;
+      el.style.display = 'block';
+      clearTimeout(el._t);
+      el._t = setTimeout(() => { el.style.display = 'none'; }, 4000);
+    }
+
+    async function submitRequest() {
+      const input = document.getElementById('req-input');
+      const title = input.value.trim();
+      if (!title) return;
+      const btn = document.querySelector('.req-send-btn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title })
+        });
+        const d = await res.json();
+        if (res.ok) { input.value = ''; hideSuggestions(); }
+        else { showReqError(d.error || 'Could not submit request'); }
+      } catch { showReqError('Network error — try again'); }
+      btn.disabled = false;
+    }
+
+    async function toggleVote(id) {
+      try {
+        const res = await fetch(`/api/requests/${id}/vote`, { method: 'POST' });
+        if (!res.ok) { const d = await res.json(); showReqError(d.error || 'Vote failed'); }
+      } catch {}
+    }
+
+    async function toggleReact(id, emoji) {
+      try {
+        await fetch(`/api/requests/${id}/react`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji })
+        });
+      } catch {}
+    }
+
+    // ── Floating chat reactions ───────────────────────────────────────────────
+    function sendReaction(emoji) {
+      if (wsChat && wsChat.readyState === WebSocket.OPEN) {
+        wsChat.send(JSON.stringify({ type: 'reaction', emoji }));
+      }
+    }
+
+    function spawnReactionEmoji(emoji) {
+      const wrap = document.getElementById('video-wrap');
+      if (!wrap) return;
+      const el = document.createElement('span');
+      el.className = 'float-emoji';
+      el.textContent = emoji;
+      el.style.left = (8 + Math.random() * 78) + '%';
+      wrap.appendChild(el);
+      el.addEventListener('animationend', () => el.remove());
+    }
+
+    // ── Request suggestions ──────────────────────────────────────────────────
+    let _suggestTimer = null;
+    function onReqInput(inp) {
+      clearTimeout(_suggestTimer);
+      const val = inp.value.trim();
+      if (val.length < 3) { hideSuggestions(); return; }
+      _suggestTimer = setTimeout(() => fetchSuggestions(val), 380);
+    }
+
+    async function fetchSuggestions(q) {
+      try {
+        const res = await fetch('/api/requests/suggest?q=' + encodeURIComponent(q));
+        if (!res.ok) return;
+        const { suggestions } = await res.json();
+        if (!suggestions.length) { hideSuggestions(); return; }
+        const el = document.getElementById('req-suggestions');
+        el.innerHTML = '<div class="req-sugg-label">Did you mean?</div>' +
+          suggestions.map(s => `
+            <div class="req-sugg-item" onmousedown="useSuggestion('${esc(s.title)}')">
+              <span>${esc(s.title)}</span>
+              <span class="req-sugg-pct">${s.score}% match</span>
+            </div>`).join('');
+        el.style.display = 'block';
+      } catch {}
+    }
+
+    function useSuggestion(title) {
+      document.getElementById('req-input').value = title;
+      hideSuggestions();
+    }
+
+    function hideSuggestions() {
+      const el = document.getElementById('req-suggestions');
+      if (el) el.style.display = 'none';
+    }
+
+    // ── Trending ─────────────────────────────────────────────────────────────
+    async function loadTrending() {
+      const el = document.getElementById('trending-list');
+      try {
+        const res = await fetch('/api/trending');
+        const { trending } = await res.json();
+        if (!trending.length) {
+          el.innerHTML = '<div class="trend-empty">No trending data yet — tracks become trending after they\'re played</div>';
+          return;
+        }
+        el.innerHTML = trending.map((t, i) => `
+          <div class="trend-row">
+            <span class="trend-rank">#${i + 1}</span>
+            <span class="trend-title">${esc(t.title)}</span>
+            <span class="trend-score">${t.score} pts</span>
+          </div>`).join('');
+      } catch { el.innerHTML = '<div class="trend-empty">Failed to load</div>'; }
+    }
+
     init();
+
+    // Register service worker for PWA / offline support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
   </script>
 </body>
 </html>

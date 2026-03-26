@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Now Playing — DJ Live</title>
+  <meta property="og:title" content="DJ Live — Now Playing">
+  <meta property="og:description" content="See what's playing live right now">
+  <meta name="theme-color" content="#ff4400">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:#0a0a0a;color:#fff;
+      font-family:Arial,Helvetica,sans-serif;
+      min-height:100vh;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      padding:24px;
+    }
+
+    .card{
+      width:100%;max-width:360px;
+      display:flex;flex-direction:column;align-items:center;gap:24px;
+    }
+
+    /* Cover */
+    .cover-wrap{
+      width:min(280px,72vw);aspect-ratio:1;
+      border-radius:20px;overflow:hidden;position:relative;
+      box-shadow:0 12px 48px rgba(0,0,0,.8);flex-shrink:0;
+    }
+    .cover-wrap.live{animation:glow 2s ease-in-out infinite}
+    @keyframes glow{
+      0%,100%{box-shadow:0 12px 48px rgba(255,68,0,.35)}
+      50%     {box-shadow:0 12px 64px rgba(255,68,0,.75)}
+    }
+    #cover-img{width:100%;height:100%;object-fit:cover;display:none}
+    .placeholder{
+      width:100%;height:100%;
+      background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+      display:flex;align-items:center;justify-content:center;
+      font-size:5em;
+    }
+    .disc{animation:spin 4s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Live badge */
+    .live-badge{
+      position:absolute;top:10px;left:10px;
+      background:#ff4400;color:#fff;
+      font-size:.7em;font-weight:bold;
+      padding:3px 9px;border-radius:4px;letter-spacing:1px;
+      display:none;
+    }
+
+    /* Track info */
+    .info{text-align:center;width:100%}
+    #track-title{
+      font-size:clamp(1em,5vw,1.5em);font-weight:900;
+      letter-spacing:.5px;line-height:1.3;margin-bottom:6px;
+    }
+    #track-sub{font-size:.8em;color:#666;letter-spacing:2px;text-transform:uppercase}
+
+    /* Status row */
+    .status-row{
+      display:flex;align-items:center;gap:10px;
+      font-size:.82em;color:#888;
+    }
+    .status-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0}
+    .status-dot.live{background:#ff4400;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    #viewer-text{}
+
+    /* Footer */
+    .footer{margin-top:8px;font-size:.75em;color:#333;text-align:center}
+    .footer a{color:#ff4400;text-decoration:none}
+    .footer a:hover{text-decoration:underline}
+
+    /* Offline state */
+    .offline .disc{animation:spin 8s linear infinite;opacity:.4}
+    .offline #track-title{color:#444}
+    .offline .status-dot{background:#333}
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+
+    <div class="cover-wrap" id="cover-wrap">
+      <img id="cover-img" alt="Cover art">
+      <div class="placeholder" id="placeholder"><span class="disc">💿</span></div>
+      <span class="live-badge" id="live-badge">LIVE</span>
+    </div>
+
+    <div class="info">
+      <div id="track-title">Loading…</div>
+      <div id="track-sub">DJ LIVE STREAM</div>
+    </div>
+
+    <div class="status-row">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="viewer-text">Checking…</span>
+    </div>
+
+    <div class="footer">
+      <a href="/">Join to watch the full stream →</a>
+    </div>
+
+  </div>
+
+  <script>
+    let isLive = false;
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/live');
+        if (!res.ok) return;
+        const d = await res.json();
+
+        const card   = document.getElementById('card');
+        const wrap   = document.getElementById('cover-wrap');
+        const badge  = document.getElementById('live-badge');
+        const dot    = document.getElementById('status-dot');
+        const title  = document.getElementById('track-title');
+        const sub    = document.getElementById('track-sub');
+        const vtext  = document.getElementById('viewer-text');
+
+        isLive = !!d.live;
+
+        wrap.classList.toggle('live', isLive);
+        badge.style.display = isLive ? 'block' : 'none';
+        dot.classList.toggle('live', isLive);
+        card.classList.toggle('offline', !isLive);
+
+        if (isLive) {
+          title.textContent = d.title || 'DJ Live Session';
+          sub.textContent   = 'LIVE NOW';
+          vtext.textContent = d.viewers > 0
+            ? d.viewers + ' watching'
+            : 'Live now — be the first to join!';
+        } else {
+          title.textContent = d.title || 'DJ Offline';
+          sub.textContent   = 'NEXT STREAM TBA';
+          vtext.textContent = 'Not live right now';
+        }
+
+        // Cover art
+        const img  = document.getElementById('cover-img');
+        const ph   = document.getElementById('placeholder');
+        if (d.coverUrl) {
+          img.src = d.coverUrl;
+          img.style.display = 'block';
+          ph.style.display  = 'none';
+        } else {
+          img.style.display = 'none';
+          ph.style.display  = 'flex';
+        }
+      } catch {}
+    }
+
+    refresh();
+    setInterval(refresh, 8000);
+  </script>
+</body>
+</html>

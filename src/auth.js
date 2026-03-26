@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const router    = express.Router();
 
 const { createUser, findUser, updatePassword, createToken, getSubscriptionStatus } = require('./users');
+const { validateInvite, useInvite } = require('./invites');
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -23,10 +24,17 @@ const registerLimiter = rateLimit({
 
 // POST /auth/register
 router.post('/register', registerLimiter, async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, inviteCode } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  // Invite-only mode — validate code before doing anything else
+  const inviteOnly = process.env.INVITE_ONLY === 'true';
+  if (inviteOnly) {
+    const check = validateInvite(inviteCode);
+    if (!check.valid) return res.status(400).json({ error: check.error });
   }
   if (username.length < 3 || username.length > 20) {
     return res.status(400).json({ error: 'Username must be 3-20 characters' });
@@ -46,6 +54,9 @@ router.post('/register', registerLimiter, async (req, res) => {
     if (result.error) {
       return res.status(409).json({ error: result.error });
     }
+
+    // Consume invite code now that registration succeeded
+    if (inviteOnly && inviteCode) useInvite(inviteCode, result.user.username);
 
     const token = createToken(result.user);
     const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
@@ -73,6 +84,10 @@ router.post('/login', loginLimiter, async (req, res) => {
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
     return res.status(401).json({ error: 'Invalid username or password' });
+  }
+
+  if (user.suspended) {
+    return res.status(403).json({ error: 'Your account has been suspended' });
   }
 
   const sub    = getSubscriptionStatus(user);
