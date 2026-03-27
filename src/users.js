@@ -94,6 +94,21 @@ function updateAvatar(username, avatar) {
   return true;
 }
 
+function updatePushPrefs(username, prefs) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].pushPrefs = { ...users[username].pushPrefs, ...prefs };
+  saveUsers(users);
+  return users[username].pushPrefs;
+}
+
+function getPushPrefs(username) {
+  const users = loadUsers();
+  const u = users[username];
+  if (!u) return null;
+  return { goLive: true, nextTrack: false, requestAccepted: false, ...u.pushPrefs };
+}
+
 function setSuspended(username, suspended) {
   const users = loadUsers();
   if (!users[username]) return false;
@@ -147,4 +162,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, updatePushPrefs, getPushPrefs, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };

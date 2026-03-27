@@ -1457,7 +1457,7 @@
       clearTimeout(_mdbTimeout);
       _mdbTimeout = setTimeout(async () => {
         const q = document.getElementById('mdb-search').value.trim();
-        if (q.length < 2) { document.getElementById('mdb-results').innerHTML = ''; return; }
+        if (q.length < 2) { document.getElementById('mdb-results').innerHTML = '<div class="empty" style="color:var(--muted);font-size:.85em">Type at least 2 characters to search…</div>'; return; }
         try {
           const res = await fetch(`/api/admin/music-db/search?q=${encodeURIComponent(q)}`);
           if (!res.ok) return;

@@ -1,6 +1,7 @@
 const fs       = require('fs');
 const path     = require('path');
 const webpush  = require('web-push');
+const { getPushPrefs } = require('./users');
 
 const SUBS_PATH = path.join(__dirname, '../data/push-subs.json');
 
@@ -40,23 +41,26 @@ function removeSub(username) {
   _save(subs);
 }
 
-/** Send a "DJ is live" push notification to all subscribers. */
-async function notifyLive(title) {
-  if (!process.env.VAPID_PUBLIC_KEY) return;
-  const subs   = _load();
-  const payload = JSON.stringify({
-    title: 'DJ is LIVE',
-    body:  title ? `Now playing: ${title}` : 'The stream has started',
-    url:   '/watch.html',
+async function _send(username, sub, payload, stale) {
+  return webpush.sendNotification(sub, JSON.stringify(payload)).catch(err => {
+    if (err.statusCode === 410 || err.statusCode === 404) stale.push(username);
   });
+}
+
+async function _broadcast(payload, prefKey) {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  const subs  = _load();
   const stale = [];
   await Promise.allSettled(
-    Object.entries(subs).map(([username, sub]) =>
-      webpush.sendNotification(sub, payload).catch(err => {
-        // 410 Gone = subscription expired/unsubscribed
-        if (err.statusCode === 410 || err.statusCode === 404) stale.push(username);
-      })
-    )
+    Object.entries(subs).map(([username, sub]) => {
+      if (prefKey) {
+        const prefs = getPushPrefs(username);
+        // Default goLive=true, others=false
+        const defaultOn = prefKey === 'goLive';
+        if (prefs ? !prefs[prefKey] : !defaultOn) return Promise.resolve();
+      }
+      return _send(username, sub, payload, stale);
+    })
   );
   if (stale.length) {
     const s = _load();
@@ -65,4 +69,44 @@ async function notifyLive(title) {
   }
 }
 
-module.exports = { saveSub, removeSub, notifyLive };
+/** Send a "DJ is live" push notification (filtered by goLive pref, default on). */
+async function notifyLive(title) {
+  await _broadcast({
+    title: 'DJ is LIVE',
+    body:  title ? `Now playing: ${title}` : 'The stream has started',
+    url:   '/watch.html',
+  }, 'goLive');
+}
+
+/** Notify subscribers who opted in to next-track announcements. */
+async function notifyNextTrack(title) {
+  if (!title) return;
+  await _broadcast({
+    title: 'Up Next',
+    body:  title,
+    url:   '/watch.html',
+  }, 'nextTrack');
+}
+
+/** Notify a specific user that their request was accepted (if opted in). */
+async function notifyRequestAccepted(username, title) {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  const prefs = getPushPrefs(username);
+  if (!prefs || !prefs.requestAccepted) return;
+  const subs = _load();
+  const sub  = subs[username];
+  if (!sub) return;
+  const stale = [];
+  await _send(username, sub, {
+    title: 'Request Accepted!',
+    body:  `"${title}" is up next`,
+    url:   '/watch.html',
+  }, stale);
+  if (stale.length) {
+    const s = _load();
+    delete s[username];
+    _save(s);
+  }
+}
+
+module.exports = { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted };

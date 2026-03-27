@@ -433,7 +433,12 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   text-transform:uppercase}
 .queue-empty{color:var(--muted);font-size:.82em;text-align:center;padding:12px 0}
 .queue-item{display:flex;align-items:center;gap:6px;padding:6px 8px;
-  background:#0a140a;border:1px solid #1a2e1a;border-radius:7px;margin-bottom:4px}
+  background:#0a140a;border:1px solid #1a2e1a;border-radius:7px;margin-bottom:4px;
+  cursor:default;transition:background .1s}
+.queue-item.drag-over{background:#0a2a0a;border-color:#44aa44}
+.queue-item.dragging{opacity:.4}
+.queue-drag{color:#333;font-size:1em;cursor:grab;flex-shrink:0;padding:0 2px;user-select:none}
+.queue-drag:active{cursor:grabbing}
 .queue-pos{color:var(--muted);font-size:.72em;min-width:16px;text-align:right;flex-shrink:0}
 .queue-title{flex:1;font-size:.8em;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;color:#ccc}
@@ -3422,7 +3427,8 @@ function renderQueue(queue) {
     return;
   }
   el.innerHTML = _djQueue.map((r, i) => `
-    <div class="queue-item" id="qi-${r.id}">
+    <div class="queue-item" id="qi-${r.id}" draggable="true" data-id="${r.id}">
+      <span class="queue-drag" title="Drag to reorder">⠿</span>
       <span class="queue-pos">${i + 1}</span>
       <span class="queue-title" title="${esc(r.title)}">${esc(r.title)}</span>
       <span class="queue-votes">★${r.votes}</span>
@@ -3434,6 +3440,7 @@ function renderQueue(queue) {
       <button class="qb qb-del"   onclick="djRemoveRequest('${r.id}')">✕</button>
     </div>`
   ).join('');
+  setupQueueDrag(el);
 }
 
 async function queueMove(id, direction) {
@@ -3445,6 +3452,49 @@ async function queueMove(id, direction) {
     });
     if (!res.ok) toast('Could not reorder queue', true);
   } catch { toast('Network error', true); }
+}
+
+function setupQueueDrag(container) {
+  let dragId = null;
+  container.querySelectorAll('.queue-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      dragId = item.dataset.id;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      container.querySelectorAll('.queue-item').forEach(i => i.classList.remove('drag-over'));
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      container.querySelectorAll('.queue-item').forEach(i => i.classList.remove('drag-over'));
+      if (item.dataset.id !== dragId) item.classList.add('drag-over');
+    });
+    item.addEventListener('drop', async e => {
+      e.preventDefault();
+      item.classList.remove('drag-over');
+      if (!dragId || item.dataset.id === dragId) return;
+      // Determine if we're moving up or down
+      const ids = [...container.querySelectorAll('.queue-item')].map(i => i.dataset.id);
+      const fromIdx = ids.indexOf(dragId);
+      const toIdx   = ids.indexOf(item.dataset.id);
+      if (fromIdx === -1 || toIdx === -1) return;
+      // Move by calling the API repeatedly (direction: up/down)
+      const steps = toIdx - fromIdx;
+      const dir   = steps > 0 ? 'down' : 'up';
+      const count = Math.abs(steps);
+      for (let s = 0; s < count; s++) {
+        await fetch(`/api/requests/${dragId}/move`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+          body: JSON.stringify({ direction: dir })
+        });
+      }
+      dragId = null;
+    });
+  });
 }
 
 function toggleReqPanel() {
@@ -3553,6 +3603,7 @@ async function djRemoveRequest(id) {
 }
 
 async function djClearRequests() {
+  if (!confirm('Clear all played and rejected requests?')) return;
   try {
     await fetch('/api/requests', { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
   } catch {}

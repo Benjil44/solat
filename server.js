@@ -23,7 +23,8 @@ const { setChatBan } = require('./src/users');
 const { banRecord, clearRecord: clearFlagged, getAll: getAllFlagged } = require('./src/flagged');
 const { addRequest, voteRequest, reactRequest, setStatus: setReqStatus, removeRequest, clearFinished, getRequests, getTrending, cleanupExpired, moveRequest, getAcceptedQueue } = require('./src/requests');
 const { resetStats, recordViewerCount, getStats } = require('./src/stats');
-const { saveSub, removeSub, notifyLive } = require('./src/push');
+const { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted } = require('./src/push');
+const { updatePushPrefs, getPushPrefs } = require('./src/users');
 const { logAudit, getAuditLog } = require('./src/audit');
 const { updatePassword } = require('./src/users');
 const bcrypt = require('bcryptjs');
@@ -357,6 +358,7 @@ app.post('/api/admin/next-track', requireAdmin, (req, res) => {
   nextTrackTitle = typeof title === 'string' ? title.trim().slice(0, 120) : '';
   nextTrackCover = typeof cover === 'string' ? cover.trim() : '';
   broadcastAll({ type: 'next-track', title: nextTrackTitle || null, cover: nextTrackCover || null });
+  if (nextTrackTitle) notifyNextTrack(nextTrackTitle).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -389,7 +391,7 @@ app.get('/api/profile', requireAuth, (req, res) => {
     rejected: allUserReqs.filter(r => r.status === 'rejected').length,
   };
   res.json({
-    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt, avatar: user.avatar || '' },
+    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt, avatar: user.avatar || '', pushPrefs: getPushPrefs(user.username) },
     requests: userRequests,
     stats,
   });
@@ -462,6 +464,20 @@ app.post('/api/push/subscribe', requireAuth, (req, res) => {
 app.delete('/api/push/subscribe', requireAuth, (req, res) => {
   removeSub(req.user.username);
   res.json({ ok: true });
+});
+
+app.get('/api/push/prefs', requireAuth, (req, res) => {
+  res.json(getPushPrefs(req.user.username) || { goLive: true, nextTrack: false, requestAccepted: false });
+});
+
+app.post('/api/push/prefs', requireAuth, (req, res) => {
+  const { goLive, nextTrack, requestAccepted } = req.body;
+  const updated = updatePushPrefs(req.user.username, {
+    goLive:           typeof goLive === 'boolean'           ? goLive           : undefined,
+    nextTrack:        typeof nextTrack === 'boolean'        ? nextTrack        : undefined,
+    requestAccepted:  typeof requestAccepted === 'boolean'  ? requestAccepted  : undefined,
+  });
+  res.json({ ok: true, prefs: updated });
 });
 
 // ─── DJ Schedule ──────────────────────────────────────────────────────────────
@@ -613,9 +629,15 @@ app.patch('/api/requests/:id/status', requireAdmin, (req, res) => {
   if (!['pending', 'accepted', 'played', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
+  // Capture request details before status change for notification
+  const reqItem = getRequests().find(r => r.id === req.params.id);
   const ok = setReqStatus(req.params.id, status);
   if (!ok) return res.status(404).json({ error: 'Not found' });
   broadcastRequests();
+  // Notify requester if they opted in to request-accepted notifications
+  if (status === 'accepted' && reqItem) {
+    notifyRequestAccepted(reqItem.requestedBy, reqItem.title).catch(() => {});
+  }
   res.json({ ok: true });
 });
 

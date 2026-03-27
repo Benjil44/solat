@@ -84,6 +84,10 @@
     .form-msg{font-size:.8em;margin-top:6px;min-height:1.2em}
     .form-msg.ok{color:#44cc88}
     .form-msg.err{color:#ff6666}
+    /* Loading skeleton */
+    .skeleton{background:linear-gradient(90deg,#1a1a1a 25%,#252525 50%,#1a1a1a 75%);
+      background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:6px;display:inline-block}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     /* Avatar picker */
     .avatar-picker{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
     .avatar-opt{font-size:1.6em;cursor:pointer;padding:4px;border-radius:8px;
@@ -103,7 +107,7 @@
     <div class="profile-card" id="profile-card">
       <div class="avatar" id="p-avatar">🎵</div>
       <div class="profile-info">
-        <div class="profile-username" id="p-username">Loading…</div>
+        <div class="profile-username" id="p-username"><span class="skeleton" style="width:140px;height:1.2em">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
         <div class="profile-reg" id="p-reg"></div>
         <span class="sub-pill" id="p-sub-pill"></span>
         <span class="sub-days" id="p-days"></span>
@@ -130,6 +134,26 @@
     </div>
 
     <!-- Clips -->
+    <!-- Push Notification Preferences -->
+    <div class="action-card" id="push-prefs-card" style="display:none;margin-bottom:20px">
+      <div class="action-card-title">Notification Preferences</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85em;color:var(--text)">
+          <input type="checkbox" id="pref-golive" style="accent-color:var(--accent)" onchange="savePushPrefs()">
+          Go-live alerts <span style="color:var(--muted);font-size:.85em">(default on)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85em;color:var(--text)">
+          <input type="checkbox" id="pref-nexttrack" style="accent-color:var(--accent)" onchange="savePushPrefs()">
+          Next track announcements
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85em;color:var(--text)">
+          <input type="checkbox" id="pref-reqaccepted" style="accent-color:var(--accent)" onchange="savePushPrefs()">
+          My requests accepted
+        </label>
+      </div>
+      <div class="form-msg" id="pp-msg"></div>
+    </div>
+
     <div class="req-card" id="clips-card" style="margin-bottom:20px;display:none">
       <div class="req-card-title">Your Clips</div>
       <div id="p-clips-list"><div class="req-empty">No clips yet — hit 📌 while the stream is live!</div></div>
@@ -239,11 +263,34 @@
       }
     }
 
+    async function savePushPrefs() {
+      const prefs = {
+        goLive:          document.getElementById('pref-golive').checked,
+        nextTrack:       document.getElementById('pref-nexttrack').checked,
+        requestAccepted: document.getElementById('pref-reqaccepted').checked,
+      };
+      const msg = document.getElementById('pp-msg');
+      const res = await fetch('/api/push/prefs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs)
+      });
+      if (res.ok) { msg.className = 'form-msg ok'; msg.textContent = 'Saved'; setTimeout(() => { msg.textContent = ''; }, 1500); }
+      else { msg.className = 'form-msg err'; msg.textContent = 'Failed to save'; }
+    }
+
     function render({ user, requests, stats }) {
       document.title = user.username + ' — DJ Live';
       document.getElementById('p-username').textContent = user.username;
       document.getElementById('p-avatar').textContent = user.avatar || '🎵';
       initAvatarPicker(user.avatar || '');
+      // Push prefs — only show if Notifications API is available
+      if ('Notification' in window) {
+        const prefs = user.pushPrefs || { goLive: true, nextTrack: false, requestAccepted: false };
+        document.getElementById('pref-golive').checked       = prefs.goLive !== false;
+        document.getElementById('pref-nexttrack').checked    = !!prefs.nextTrack;
+        document.getElementById('pref-reqaccepted').checked  = !!prefs.requestAccepted;
+        document.getElementById('push-prefs-card').style.display = 'block';
+      }
       document.getElementById('p-reg').textContent =
         'Member since ' + new Date(user.registeredAt).toLocaleDateString('en-GB', { year:'numeric', month:'long' });
 
