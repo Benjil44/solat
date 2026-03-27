@@ -1,5 +1,5 @@
 // DJ Stream Service Worker
-const CACHE = 'djstream-v3';
+const CACHE = 'djstream-v4';
 
 // Static assets to pre-cache on install
 const PRECACHE = [
@@ -62,7 +62,7 @@ self.addEventListener('fetch', e => {
             caches.open(CACHE).then(c => c.put(e.request, clone));
           }
           return res;
-        });
+        }).catch(() => new Response('', { status: 404, statusText: 'Not Found' }));
       })
     );
   }
