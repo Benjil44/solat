@@ -391,6 +391,15 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color:#888;border-radius:5px;cursor:pointer;font-size:.78em;transition:.1s}
 .nudge-btn:hover{border-color:#aaa;color:#ddd}
 .nudge-btn:active{transform:scale(.9)}
+.reset-tempo-btn{padding:3px 8px;background:var(--panel);border:1px solid #664400;
+  color:var(--yellow);border-radius:5px;cursor:pointer;font-size:.72em;
+  letter-spacing:.5px;transition:.15s;position:relative;overflow:hidden}
+.reset-tempo-btn:hover{border-color:var(--yellow);background:#1a1100}
+.reset-tempo-btn:active{transform:scale(.93)}
+.reset-tempo-btn:disabled{opacity:.35;cursor:default}
+.reset-tempo-btn.ramping{border-color:var(--yellow);color:var(--yellow);background:#1a1100}
+.reset-tempo-btn .ramp-bar{position:absolute;left:0;top:0;height:100%;width:0%;
+  background:rgba(255,204,0,.18);transition:none;pointer-events:none}
 
 /* Record mix button */
 .record-btn{width:100%;padding:10px;border:1px solid #333;border-radius:8px;
@@ -567,9 +576,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .eq-col{gap:2px}
   .eq-val{font-size:.68em}
 
-  /* BPM row — hide nudge on very small screens, keep tap+sync */
+  /* BPM row — hide nudge + reset on very small screens, keep tap+sync */
   .bpm-row{flex-wrap:wrap;gap:5px}
-  .nudge-btn{display:none}
+  .nudge-btn,.reset-tempo-btn{display:none}
 
   /* Cue + loop rows — slightly smaller text */
   .cue-btn,.loop-btn{font-size:.68em;padding:5px 2px}
@@ -650,6 +659,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="tap-btn" onclick="tapTempo('A')">TAP</button>
       <button class="nudge-btn" onclick="nudgeSpeed('A',-0.005)" title="Slow down slightly">◀</button>
       <button class="nudge-btn" onclick="nudgeSpeed('A', 0.005)" title="Speed up slightly">▶</button>
+      <button class="reset-tempo-btn" id="resetTempA" onclick="gradualResetTempo('A')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarA"></span></button>
       <button class="sync-btn" id="syncBtnA" onclick="syncBPM('A')" title="Match this deck's BPM to Deck B">SYNC</button>
     </div>
     <div class="key-row">
@@ -675,7 +685,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="speed-wrap">
       <span style="color:var(--muted);font-size:.75em">SPEED</span>
       <input type="range" id="speedA" min="0.5" max="2" step="0.01" value="1"
-        oninput="setSpeed('A',this.value)">
+        oninput="_cancelRamp('A');setSpeed('A',this.value)">
       <span class="speed-val" id="speedValA">100%</span>
     </div>
 
@@ -873,6 +883,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="tap-btn" onclick="tapTempo('B')">TAP</button>
       <button class="nudge-btn" onclick="nudgeSpeed('B',-0.005)" title="Slow down slightly">◀</button>
       <button class="nudge-btn" onclick="nudgeSpeed('B', 0.005)" title="Speed up slightly">▶</button>
+      <button class="reset-tempo-btn" id="resetTempB" onclick="gradualResetTempo('B')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarB"></span></button>
       <button class="sync-btn" id="syncBtnB" onclick="syncBPM('B')" title="Match this deck's BPM to Deck A">SYNC</button>
     </div>
     <div class="key-row">
@@ -895,7 +906,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="speed-wrap">
       <span style="color:var(--muted);font-size:.75em">SPEED</span>
       <input type="range" id="speedB" min="0.5" max="2" step="0.01" value="1"
-        oninput="setSpeed('B',this.value)">
+        oninput="_cancelRamp('B');setSpeed('B',this.value)">
       <span class="speed-val" id="speedValB">100%</span>
     </div>
 
@@ -3246,6 +3257,7 @@ function syncBPM(id) {
 }
 
 function nudgeSpeed(id, delta) {
+  _cancelRamp(id); // cancel any in-progress auto-reset
   const slider = document.getElementById('speed' + id);
   const current = parseFloat(slider.value);
   const next = Math.max(0.5, Math.min(2.0, Math.round((current + delta) * 1000) / 1000));
@@ -3260,6 +3272,67 @@ function nudgeSpeed(id, delta) {
   // Clear synced indicator on manual nudge (now slightly off)
   const btn = document.getElementById('syncBtn' + id);
   if (btn) btn.classList.remove('synced');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GRADUAL TEMPO RESET
+// ═══════════════════════════════════════════════════════════════
+const _rampAF = { A: null, B: null };
+
+function _cancelRamp(id) {
+  if (!_rampAF[id]) return;
+  cancelAnimationFrame(_rampAF[id]);
+  _rampAF[id] = null;
+  const btn = document.getElementById('resetTemp' + id);
+  const bar = document.getElementById('rampBar' + id);
+  if (btn) { btn.disabled = false; btn.classList.remove('ramping'); }
+  if (bar) bar.style.width = '0%';
+}
+
+/**
+ * Smoothly ramp playback rate back to 1.0 over DURATION ms.
+ * Uses smoothstep easing (3t²–2t³) so the transition starts and ends gently.
+ * Invisible to listeners because the change is gradual.
+ */
+function gradualResetTempo(id) {
+  const slider = document.getElementById('speed' + id);
+  const startVal = parseFloat(slider.value);
+  if (Math.abs(startVal - 1.0) < 0.0005) return; // already at 100%
+
+  _cancelRamp(id); // cancel any prior ramp
+
+  const DURATION = 2500; // ms — slow enough to be imperceptible
+  const startTime = performance.now();
+  const btn = document.getElementById('resetTemp' + id);
+  const bar = document.getElementById('rampBar' + id);
+  if (btn) { btn.disabled = true; btn.classList.add('ramping'); }
+
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / DURATION);
+    // Smoothstep: gentle start and end, faster in the middle
+    const ease = t * t * (3 - 2 * t);
+    const val = startVal + (1.0 - startVal) * ease;
+
+    slider.value = val;
+    setSpeed(id, val);
+    if (bar) bar.style.width = (ease * 100).toFixed(1) + '%';
+
+    if (t < 1) {
+      _rampAF[id] = requestAnimationFrame(step);
+    } else {
+      // Land exactly on 1.0
+      slider.value = 1;
+      setSpeed(id, 1);
+      _rampAF[id] = null;
+      if (btn) { btn.disabled = false; btn.classList.remove('ramping'); }
+      if (bar) bar.style.width = '0%';
+      // Also clear synced badge — user is now at natural tempo
+      const syncBtn = document.getElementById('syncBtn' + id);
+      if (syncBtn) syncBtn.classList.remove('synced');
+    }
+  }
+
+  _rampAF[id] = requestAnimationFrame(step);
 }
 
 // ═══════════════════════════════════════════════════════════════
