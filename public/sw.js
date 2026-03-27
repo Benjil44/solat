@@ -1,5 +1,5 @@
 // DJ Stream Service Worker
-const CACHE = 'djstream-v4';
+const CACHE = 'djstream-v5';
 
 // Static assets to pre-cache on install
 const PRECACHE = [
@@ -33,10 +33,14 @@ self.addEventListener('fetch', e => {
 
   const { pathname } = new URL(e.request.url);
 
-  // Never cache API responses or live HLS streams
+  // Never cache API responses, live HLS streams, or icon/favicon files
   if (pathname.startsWith('/api/') ||
       pathname.startsWith('/live/') ||
-      pathname.startsWith('/ws'))   return;
+      pathname.startsWith('/ws')   ||
+      pathname === '/favicon.ico'  ||
+      pathname === '/icon.svg'     ||
+      pathname === '/icon-192.png' ||
+      pathname === '/icon-512.png') return;
 
   // Network-first for HTML pages (always fresh), cache-first for assets
   const isHtml = pathname.endsWith('.html') || pathname === '/';
