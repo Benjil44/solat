@@ -3,7 +3,7 @@ const bcrypt    = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const router    = express.Router();
 
-const { createUser, findUser, updatePassword, createToken, getSubscriptionStatus } = require('./users');
+const { createUser, findUser, deleteUser, updatePassword, createToken, getSubscriptionStatus } = require('./users');
 const { validateInvite, useInvite } = require('./invites');
 
 const loginLimiter = rateLimit({
@@ -121,6 +121,28 @@ router.post('/change-password', async (req, res) => {
 
   const hashed = await bcrypt.hash(newPassword, 10);
   updatePassword(payload.username, hashed);
+  res.json({ success: true });
+});
+
+// DELETE /auth/delete-account — requires password confirmation
+router.delete('/delete-account', async (req, res) => {
+  const { verifyToken } = require('./users');
+  const token = req.cookies.token || req.headers['x-token'];
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: 'Invalid session' });
+
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'Password is required to delete your account' });
+
+  const user = findUser(payload.username);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ error: 'Incorrect password' });
+
+  deleteUser(payload.username);
+  res.clearCookie('token');
   res.json({ success: true });
 });
 

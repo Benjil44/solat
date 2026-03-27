@@ -67,6 +67,17 @@ function getSchedule() {
     const d = JSON.parse(fs.readFileSync(SCHEDULE_PATH, 'utf8'));
     // Expire past schedules automatically
     if (d.scheduledAt && new Date(d.scheduledAt).getTime() < Date.now() - 30 * 60 * 1000) {
+      if (d.repeat) {
+        // Auto-advance by 7 days until the next occurrence is in the future
+        let next = new Date(d.scheduledAt).getTime();
+        while (next < Date.now() - 30 * 60 * 1000) {
+          next += 7 * 24 * 60 * 60 * 1000;
+        }
+        const nextISO = new Date(next).toISOString();
+        saveSchedule({ scheduledAt: nextISO, repeat: true });
+        return { scheduledAt: nextISO, repeat: true };
+      }
+      clearSchedule();
       return null;
     }
     return d;
@@ -241,6 +252,14 @@ app.use('/live', hlsGuestLimiter, (req, res, next) => {
   next();
 }, express.static(HLS_PATH));
 
+// ─── Viewer history (sampled every 30s, kept for 2h) ─────────────────────────
+const viewerHistory = []; // [{ t: timestamp, v: count }]
+setInterval(() => {
+  viewerHistory.push({ t: Date.now(), v: viewers.size });
+  const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+  while (viewerHistory.length && viewerHistory[0].t < cutoff) viewerHistory.shift();
+}, 30_000).unref();
+
 // ─── Admin APIs ───────────────────────────────────────────────────────────────
 app.get('/api/admin/live-stats', requireAdmin, (req, res) => {
   const stats = getStats();
@@ -255,6 +274,12 @@ app.get('/api/admin/live-stats', requireAdmin, (req, res) => {
     durationSec,
     topRequested:  getTrending(5),
   });
+});
+
+app.get('/api/admin/viewer-history', requireAdmin, (req, res) => {
+  // Also include current snapshot
+  const now = [{ t: Date.now(), v: viewers.size }];
+  res.json({ history: [...viewerHistory, ...now] });
 });
 
 app.get('/api/admin/stream-status', requireAdmin, (req, res) => {
@@ -400,15 +425,15 @@ app.get('/api/schedule', (req, res) => {
 
 // Admin: set or clear the schedule
 app.post('/api/admin/schedule', requireAdmin, (req, res) => {
-  const { scheduledAt } = req.body; // ISO string or null
+  const { scheduledAt, repeat } = req.body; // ISO string or null
   if (!scheduledAt) {
     clearSchedule();
     return res.json({ ok: true, scheduledAt: null });
   }
   const ts = new Date(scheduledAt).getTime();
   if (isNaN(ts)) return res.status(400).json({ error: 'Invalid date' });
-  saveSchedule({ scheduledAt });
-  res.json({ ok: true, scheduledAt });
+  saveSchedule({ scheduledAt, repeat: !!repeat });
+  res.json({ ok: true, scheduledAt, repeat: !!repeat });
 });
 
 // ─── Admin: password reset ────────────────────────────────────────────────────

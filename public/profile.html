@@ -64,6 +64,26 @@
     .rs-rejected{border-color:#882200;color:#aa3300}
     .req-votes{flex-shrink:0;color:#888;font-size:.8em}
     .req-date{flex-shrink:0;color:var(--muted);font-size:.75em}
+
+    /* ── Action cards ── */
+    .action-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:20px 24px;margin-bottom:20px}
+    .action-card-title{font-size:.72em;font-weight:bold;letter-spacing:2px;color:var(--muted);
+      text-transform:uppercase;margin-bottom:14px}
+    .form-row{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+    .form-label{font-size:.78em;color:var(--muted)}
+    .form-input{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:7px;
+      color:#fff;padding:8px 12px;font-size:.88em;outline:none;width:100%}
+    .form-input:focus{border-color:var(--accent)}
+    .btn-primary{padding:8px 22px;background:var(--accent);border:none;color:#fff;
+      border-radius:7px;cursor:pointer;font-size:.85em;font-weight:bold}
+    .btn-primary:hover{background:#e03a00}
+    .btn-danger-outline{padding:8px 22px;background:transparent;border:1px solid #882200;
+      color:#cc3300;border-radius:7px;cursor:pointer;font-size:.85em}
+    .btn-danger-outline:hover{background:#1a0500;border-color:#ff4444;color:#ff6666}
+    .form-msg{font-size:.8em;margin-top:6px;min-height:1.2em}
+    .form-msg.ok{color:#44cc88}
+    .form-msg.err{color:#ff6666}
   </style>
 </head>
 <body>
@@ -94,6 +114,39 @@
         <div class="mini-stat"><div class="mval" id="ps-rejected">0</div><div class="mlbl">Rejected</div></div>
       </div>
       <div id="p-req-list"><div class="req-empty">Loading…</div></div>
+    </div>
+
+    <!-- Change Password -->
+    <div class="action-card">
+      <div class="action-card-title">Change Password</div>
+      <div class="form-row">
+        <label class="form-label">Current Password</label>
+        <input class="form-input" type="password" id="cp-current" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="form-row">
+        <label class="form-label">New Password</label>
+        <input class="form-input" type="password" id="cp-new" placeholder="Min 6 characters" autocomplete="new-password">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Confirm New Password</label>
+        <input class="form-input" type="password" id="cp-confirm" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn-primary" onclick="changePassword()">Update Password</button>
+      <div class="form-msg" id="cp-msg"></div>
+    </div>
+
+    <!-- Delete Account -->
+    <div class="action-card" style="border-color:#330000">
+      <div class="action-card-title" style="color:#882200">Danger Zone</div>
+      <p style="font-size:.82em;color:var(--muted);margin-bottom:14px">
+        Permanently delete your account and all your data. This cannot be undone.
+      </p>
+      <div class="form-row">
+        <label class="form-label">Confirm with your password</label>
+        <input class="form-input" type="password" id="del-pw" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-danger-outline" onclick="deleteAccount()">Delete My Account</button>
+      <div class="form-msg" id="del-msg"></div>
     </div>
   </div>
 
@@ -153,6 +206,51 @@
           <span class="req-date">${date}</span>
         </div>`;
       }).join('');
+    }
+
+    async function changePassword() {
+      const current  = document.getElementById('cp-current').value;
+      const newPw    = document.getElementById('cp-new').value;
+      const confirm  = document.getElementById('cp-confirm').value;
+      const msg      = document.getElementById('cp-msg');
+      msg.className  = 'form-msg';
+      if (!current || !newPw || !confirm) { msg.className = 'form-msg err'; msg.textContent = 'All fields are required.'; return; }
+      if (newPw.length < 6)              { msg.className = 'form-msg err'; msg.textContent = 'New password must be at least 6 characters.'; return; }
+      if (newPw !== confirm)             { msg.className = 'form-msg err'; msg.textContent = 'Passwords do not match.'; return; }
+      const res  = await fetch('/auth/change-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: current, newPassword: newPw })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        msg.className  = 'form-msg ok';
+        msg.textContent = 'Password updated successfully!';
+        document.getElementById('cp-current').value = '';
+        document.getElementById('cp-new').value     = '';
+        document.getElementById('cp-confirm').value = '';
+      } else {
+        msg.className  = 'form-msg err';
+        msg.textContent = data.error || 'Failed to update password.';
+      }
+    }
+
+    async function deleteAccount() {
+      const pw  = document.getElementById('del-pw').value;
+      const msg = document.getElementById('del-msg');
+      msg.className = 'form-msg';
+      if (!pw) { msg.className = 'form-msg err'; msg.textContent = 'Enter your password to confirm.'; return; }
+      if (!confirm('Permanently delete your account?\n\nThis cannot be undone.')) return;
+      const res  = await fetch('/auth/delete-account', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/?deleted=1';
+      } else {
+        msg.className  = 'form-msg err';
+        msg.textContent = data.error || 'Failed to delete account.';
+      }
     }
 
     async function doLogout() {

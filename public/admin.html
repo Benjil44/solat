@@ -482,6 +482,8 @@
       <div class="stat-card"><div class="val" id="ls-dur">—</div><div class="lbl">Session Duration</div></div>
     </div>
     <div id="ls-top-list" style="padding:12px 0 4px"></div>
+    <canvas id="viewer-chart" height="80"
+      style="width:100%;margin-top:12px;border-radius:8px;background:#111;display:block"></canvas>
   </div>
 
   <!-- Stream Key -->
@@ -638,7 +640,82 @@
               </div>`
             ).join('');
         }
+      // Update viewer chart
+      loadViewerChart();
       } catch {}
+    }
+
+    // ── Viewer chart ───────────────────────────────────────────────────────────
+    async function loadViewerChart() {
+      try {
+        const res = await fetch('/api/admin/viewer-history');
+        if (!res.ok) return;
+        const { history } = await res.json();
+        drawViewerChart(history);
+      } catch {}
+    }
+
+    function drawViewerChart(history) {
+      const canvas = document.getElementById('viewer-chart');
+      if (!canvas || !history.length) return;
+      const dpr = window.devicePixelRatio || 1;
+      const W   = canvas.offsetWidth  || 600;
+      const H   = 80;
+      canvas.width  = W * dpr;
+      canvas.height = H * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, W, H);
+
+      const maxV   = Math.max(1, ...history.map(p => p.v));
+      const minT   = history[0].t;
+      const maxT   = history[history.length - 1].t;
+      const rangeT = Math.max(maxT - minT, 1);
+      const pad    = { l: 28, r: 8, t: 8, b: 18 };
+      const cW     = W - pad.l - pad.r;
+      const cH     = H - pad.t - pad.b;
+
+      // Grid lines + y labels
+      ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + cH - (i / 4) * cH;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
+        ctx.fillStyle = '#444'; ctx.font = '9px Arial'; ctx.textAlign = 'right';
+        ctx.fillText(Math.round(maxV * i / 4), pad.l - 3, y + 3);
+      }
+
+      if (history.length < 2) return;
+
+      // Area fill
+      const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + cH);
+      grad.addColorStop(0, 'rgba(255,68,0,.35)');
+      grad.addColorStop(1, 'rgba(255,68,0,.02)');
+      ctx.beginPath();
+      history.forEach((p, i) => {
+        const x = pad.l + ((p.t - minT) / rangeT) * cW;
+        const y = pad.t + cH - (p.v / maxV) * cH;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.lineTo(pad.l + cW, pad.t + cH);
+      ctx.lineTo(pad.l,       pad.t + cH);
+      ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+
+      // Line
+      ctx.beginPath(); ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 1.5;
+      history.forEach((p, i) => {
+        const x = pad.l + ((p.t - minT) / rangeT) * cW;
+        const y = pad.t + cH - (p.v / maxV) * cH;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Time labels
+      ctx.fillStyle = '#444'; ctx.font = '9px Arial'; ctx.textAlign = 'center';
+      [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+        const x = pad.l + f * cW;
+        ctx.fillText(new Date(minT + f * rangeT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), x, H - 3);
+      });
     }
 
     // ── Stream status ─────────────────────────────────────────────────────────
