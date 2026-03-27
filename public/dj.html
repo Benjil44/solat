@@ -1322,7 +1322,8 @@ function setSpeed(id, val) {
   val = parseFloat(val);
   const deck = decks[id];
   if (deck.source) deck.source.playbackRate.value = val;
-  document.getElementById('speedVal' + id).textContent = Math.round(val * 100) + '%';
+  const pct = (val * 100).toFixed(1);
+  document.getElementById('speedVal' + id).textContent = (pct.endsWith('.0') ? pct.slice(0,-2) : pct) + '%';
 }
 
 function setVol(id, val) {
