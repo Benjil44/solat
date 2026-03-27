@@ -4,4 +4,6 @@ data/
 media/
 .claude/
 memory/
+Assets/
+tmp_*.ps1
 *.log
