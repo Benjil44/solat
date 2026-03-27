@@ -84,6 +84,12 @@
     .form-msg{font-size:.8em;margin-top:6px;min-height:1.2em}
     .form-msg.ok{color:#44cc88}
     .form-msg.err{color:#ff6666}
+    /* Avatar picker */
+    .avatar-picker{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+    .avatar-opt{font-size:1.6em;cursor:pointer;padding:4px;border-radius:8px;
+      border:2px solid transparent;transition:.12s;line-height:1}
+    .avatar-opt:hover{border-color:#444}
+    .avatar-opt.selected{border-color:var(--accent);background:#1a0800}
   </style>
 </head>
 <body>
@@ -95,13 +101,20 @@
 
   <div class="wrap">
     <div class="profile-card" id="profile-card">
-      <div class="avatar">🎵</div>
+      <div class="avatar" id="p-avatar">🎵</div>
       <div class="profile-info">
         <div class="profile-username" id="p-username">Loading…</div>
         <div class="profile-reg" id="p-reg"></div>
         <span class="sub-pill" id="p-sub-pill"></span>
         <span class="sub-days" id="p-days"></span>
       </div>
+    </div>
+
+    <!-- Avatar picker -->
+    <div class="action-card" style="padding:16px 24px">
+      <div class="action-card-title">Your Avatar</div>
+      <div class="avatar-picker" id="avatar-picker"></div>
+      <div class="form-msg" id="av-msg"></div>
     </div>
 
     <div class="req-card">
@@ -114,6 +127,12 @@
         <div class="mini-stat"><div class="mval" id="ps-rejected">0</div><div class="mlbl">Rejected</div></div>
       </div>
       <div id="p-req-list"><div class="req-empty">Loading…</div></div>
+    </div>
+
+    <!-- Clips -->
+    <div class="req-card" id="clips-card" style="margin-bottom:20px;display:none">
+      <div class="req-card-title">Your Clips</div>
+      <div id="p-clips-list"><div class="req-empty">No clips yet — hit 📌 while the stream is live!</div></div>
     </div>
 
     <!-- Change Password -->
@@ -157,15 +176,74 @@
     }
 
     async function loadProfile() {
-      const res = await fetch('/api/profile');
-      if (!res.ok) { window.location.href = '/'; return; }
-      const d = await res.json();
+      const [profRes, clipsRes] = await Promise.all([
+        fetch('/api/profile'),
+        fetch('/api/clips')
+      ]);
+      if (!profRes.ok) { window.location.href = '/'; return; }
+      const d = await profRes.json();
       render(d);
+      if (clipsRes.ok) {
+        const { clips } = await clipsRes.json();
+        renderClips(clips);
+      }
+    }
+
+    function renderClips(clips) {
+      const card = document.getElementById('clips-card');
+      const list = document.getElementById('p-clips-list');
+      if (!clips || !clips.length) return;
+      card.style.display = 'block';
+      list.innerHTML = clips.map((c, i) => {
+        const dt = new Date(c.clipAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+        return `<div class="req-row">
+          <span class="req-title" title="${esc(c.title)}">${esc(c.title)}</span>
+          <span class="req-date">${dt}</span>
+          <button onclick="deleteClip(${i})" style="background:none;border:none;color:#555;cursor:pointer;font-size:.8em;padding:0 4px" title="Remove">✕</button>
+        </div>`;
+      }).join('');
+    }
+
+    async function deleteClip(idx) {
+      const res = await fetch(`/api/clips/${idx}`, { method: 'DELETE' });
+      if (res.ok) loadProfile();
+    }
+
+    const AVATARS = ['🎵','🎧','🎤','🎸','🎹','🎺','🎻','🥁','🎼','🔊','⭐','🔥','👑','🦁','🐺','🎭'];
+
+    function initAvatarPicker(currentAvatar) {
+      const picker = document.getElementById('avatar-picker');
+      picker.innerHTML = AVATARS.map(e => `
+        <span class="avatar-opt${e === currentAvatar ? ' selected' : ''}"
+          onclick="selectAvatar('${e}')">${e}</span>`).join('');
+    }
+
+    async function selectAvatar(emoji) {
+      const msg = document.getElementById('av-msg');
+      msg.className = 'form-msg';
+      const res = await fetch('/auth/update-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: emoji })
+      });
+      if (res.ok) {
+        document.getElementById('p-avatar').textContent = emoji;
+        document.querySelectorAll('.avatar-opt').forEach(el => {
+          el.classList.toggle('selected', el.textContent === emoji);
+        });
+        msg.className = 'form-msg ok';
+        msg.textContent = 'Avatar updated!';
+        setTimeout(() => { msg.textContent = ''; }, 2000);
+      } else {
+        msg.className = 'form-msg err';
+        msg.textContent = 'Failed to update avatar.';
+      }
     }
 
     function render({ user, requests, stats }) {
       document.title = user.username + ' — DJ Live';
       document.getElementById('p-username').textContent = user.username;
+      document.getElementById('p-avatar').textContent = user.avatar || '🎵';
+      initAvatarPicker(user.avatar || '');
       document.getElementById('p-reg').textContent =
         'Member since ' + new Date(user.registeredAt).toLocaleDateString('en-GB', { year:'numeric', month:'long' });
 

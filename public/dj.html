@@ -1859,7 +1859,8 @@ function appendChat(msg) {
     const delBtn  = msg.id
       ? `<button class="mute-btn" onclick="deleteChatMsg('${esc(msg.id)}')" title="Delete message" style="opacity:.5;margin-left:2px">🗑</button>`
       : '';
-    div.innerHTML = `<span class="who">${esc(msg.username)}</span>${muteBtn}${delBtn}<span style="margin-left:4px">${esc(msg.text)}</span>`;
+    const avSpan = msg.avatar ? `<span style="margin-right:3px;font-size:.9em">${esc(msg.avatar)}</span>` : '';
+    div.innerHTML = `${avSpan}<span class="who">${esc(msg.username)}</span>${muteBtn}${delBtn}<span style="margin-left:4px">${esc(msg.text)}</span>`;
   }
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;

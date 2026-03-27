@@ -68,6 +68,8 @@ function setupChatWS(wss) {
     let isDJ     = false;
     let isGuest  = false;
 
+    let avatar = '';
+
     // DJ connects with admin key
     if (djKey && djKey === process.env.ADMIN_KEY) {
       username = '🎧 DJ';
@@ -80,6 +82,9 @@ function setupChatWS(wss) {
         return;
       }
       username = payload.username;
+      // Load avatar from DB (fresh lookup so changes take effect immediately)
+      const dbUser = findUser(username);
+      if (dbUser && dbUser.avatar) avatar = dbUser.avatar;
     } else if (process.env.GUEST_WATCH === 'true') {
       // Anonymous guest — receive-only when GUEST_WATCH is enabled
       username = 'Guest';
@@ -89,7 +94,7 @@ function setupChatWS(wss) {
       return;
     }
 
-    clients.set(ws, { username, isDJ, isGuest, isAlive: true, lastMsgAt: 0, msgCount: 0, floodWindowStart: 0 });
+    clients.set(ws, { username, isDJ, isGuest, avatar, isAlive: true, lastMsgAt: 0, msgCount: 0, floodWindowStart: 0 });
 
     // Respond to pong — mark connection alive
     ws.on('pong', () => {
@@ -221,6 +226,7 @@ function setupChatWS(wss) {
           id:   now.toString(36) + Math.random().toString(36).slice(2, 6),
           username,
           isDJ,
+          avatar: info.avatar || '',
           text,
           time: now
         };

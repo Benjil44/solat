@@ -389,10 +389,57 @@ app.get('/api/profile', requireAuth, (req, res) => {
     rejected: allUserReqs.filter(r => r.status === 'rejected').length,
   };
   res.json({
-    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt },
+    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt, avatar: user.avatar || '' },
     requests: userRequests,
     stats,
   });
+});
+
+// ─── Viewer Clips ─────────────────────────────────────────────────────────────
+const CLIPS_PATH = path.join(__dirname, 'data', 'clips.json');
+
+function loadClips() {
+  try { return JSON.parse(fs.readFileSync(CLIPS_PATH, 'utf8')); } catch { return {}; }
+}
+function saveClips(clips) {
+  fs.mkdirSync(path.dirname(CLIPS_PATH), { recursive: true });
+  const tmp = CLIPS_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(clips));
+  fs.renameSync(tmp, CLIPS_PATH);
+}
+
+app.post('/api/clips', requireAuth, (req, res) => {
+  const clips = loadClips();
+  const username = req.user.username;
+  if (!clips[username]) clips[username] = [];
+  if (clips[username].length >= 50) clips[username].shift(); // cap at 50
+  clips[username].push({
+    clipAt:   new Date().toISOString(),
+    title:    getStreamTitle() || 'Unknown',
+    isLive:   isLive || isBrowserLive(),
+  });
+  saveClips(clips);
+  res.json({ ok: true });
+});
+
+app.get('/api/clips', requireAuth, (req, res) => {
+  const clips = loadClips();
+  res.json({ clips: (clips[req.user.username] || []).slice().reverse() });
+});
+
+app.delete('/api/clips/:idx', requireAuth, (req, res) => {
+  const clips = loadClips();
+  const username = req.user.username;
+  const list = clips[username] || [];
+  // idx is from reversed list — convert back
+  const revIdx = parseInt(req.params.idx, 10);
+  if (isNaN(revIdx)) return res.status(400).json({ error: 'Invalid index' });
+  const realIdx = list.length - 1 - revIdx;
+  if (realIdx < 0 || realIdx >= list.length) return res.status(404).json({ error: 'Not found' });
+  list.splice(realIdx, 1);
+  clips[username] = list;
+  saveClips(clips);
+  res.json({ ok: true });
 });
 
 // ─── Push Notifications ───────────────────────────────────────────────────────

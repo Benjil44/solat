@@ -214,6 +214,7 @@
       display:flex; flex-direction:column; gap:5px; }
     .chat-msg { font-size:.8em; line-height:1.4; word-break:break-word; }
     .chat-msg .who { font-weight:bold; margin-right:5px; }
+    .msg-avatar { font-size:.9em; margin-right:4px; }
     .chat-msg.dj .who { color:var(--accent); }
     .chat-msg.viewer .who { color:#88aaff; }
     .chat-msg.system { color:#555; font-style:italic; }
@@ -374,6 +375,8 @@
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
+      <button class="logout-btn" id="clip-btn" onclick="saveClip()"
+              title="Save this moment to your profile" style="display:none">📌</button>
       <button class="logout-btn" id="pip-btn" onclick="togglePiP()"
               title="Picture-in-Picture" style="display:none">⛶</button>
       <button class="logout-btn" id="bell-btn" onclick="togglePushNotify()"
@@ -904,7 +907,9 @@
       liveBadge.style.display = 'none';
       const hb = document.getElementById('health-badge');
       if (hb) hb.className = '';
-      // Hide PiP button and exit PiP if active
+      // Hide PiP + clip buttons when stream ends
+      const clipBtn = document.getElementById('clip-btn');
+      if (clipBtn) clipBtn.style.display = 'none';
       const pipBtn = document.getElementById('pip-btn');
       if (pipBtn) pipBtn.style.display = 'none';
       if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
@@ -1006,6 +1011,8 @@
       if (document.pictureInPictureEnabled) {
         document.getElementById('pip-btn').style.display = 'inline-block';
       }
+      // Show clip button for logged-in users (not guests)
+      if (!isGuestMode) document.getElementById('clip-btn').style.display = 'inline-block';
       // Start visualizer once stream is playing
       initVisualizer();
       // Hide push nudge once live
@@ -1097,6 +1104,19 @@
     function dismissExpiryBanner() {
       document.getElementById('expiry-banner').classList.remove('show');
       sessionStorage.setItem('expiryDismissed', '1');
+    }
+
+    async function saveClip() {
+      const btn = document.getElementById('clip-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/clips', { method: 'POST' });
+        if (res.ok) {
+          if (btn) { btn.textContent = '✅'; setTimeout(() => { btn.textContent = '📌'; btn.disabled = false; }, 1500); }
+        } else {
+          if (btn) btn.disabled = false;
+        }
+      } catch { if (btn) btn.disabled = false; }
     }
 
     async function togglePiP() {
@@ -1226,7 +1246,8 @@
       } else {
         const isMentioned = myName && msg.text && msg.text.toLowerCase().includes('@' + myName.toLowerCase());
         if (isMentioned) div.classList.add('mentioned');
-        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${renderText(msg.text)}${timeSpan}`;
+        const avatarSpan = msg.avatar ? `<span class="msg-avatar">${esc(msg.avatar)}</span>` : '';
+        div.innerHTML = `${avatarSpan}<span class="who">${esc(msg.username)}:</span>${renderText(msg.text)}${timeSpan}`;
       }
 
       el.appendChild(div);

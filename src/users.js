@@ -86,6 +86,14 @@ function updatePassword(username, newHashedPassword) {
   return true;
 }
 
+function updateAvatar(username, avatar) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].avatar = avatar;
+  saveUsers(users);
+  return true;
+}
+
 function setSuspended(username, suspended) {
   const users = loadUsers();
   if (!users[username]) return false;
@@ -139,4 +147,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, deleteUser, updatePassword, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };

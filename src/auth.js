@@ -3,7 +3,7 @@ const bcrypt    = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const router    = express.Router();
 
-const { createUser, findUser, deleteUser, updatePassword, createToken, getSubscriptionStatus } = require('./users');
+const { createUser, findUser, deleteUser, updatePassword, updateAvatar, createToken, getSubscriptionStatus } = require('./users');
 const { validateInvite, useInvite } = require('./invites');
 
 const loginLimiter = rateLimit({
@@ -166,6 +166,23 @@ router.get('/me', (req, res) => {
 
   const sub = getSubscriptionStatus(user);
   res.json({ username: user.username, subscription: sub });
+});
+
+// POST /auth/update-profile — update avatar emoji
+router.post('/update-profile', (req, res) => {
+  const { verifyToken } = require('./users');
+  const token = req.cookies.token || req.headers['x-token'];
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: 'Invalid session' });
+
+  const { avatar } = req.body;
+  const ALLOWED_AVATARS = ['🎵','🎧','🎤','🎸','🎹','🎺','🎻','🥁','🎼','🔊','⭐','🔥','👑','🦁','🐺','🎭'];
+  if (!avatar || !ALLOWED_AVATARS.includes(avatar))
+    return res.status(400).json({ error: 'Invalid avatar' });
+
+  updateAvatar(payload.username, avatar);
+  res.json({ ok: true, avatar });
 });
 
 // GET /auth/token — returns the raw JWT so the client can use it for WebSocket auth
