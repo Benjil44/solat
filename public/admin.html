@@ -579,6 +579,27 @@
     <div id="corrections-list"><div class="empty">No corrections yet. When the DJ fixes a misspelled request, it appears here for review.</div></div>
   </div>
 
+  <!-- Music DB Management -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Music DB</div>
+      <button class="btn-sm" onclick="window.open('/api/admin/music-db/export.csv','_blank')">⬇ Export CSV</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="mdb-search" placeholder="Search tracks…" class="user-search"
+        style="flex:1;margin:0" oninput="searchMusicDB()">
+    </div>
+    <div id="mdb-results" style="margin-bottom:12px"></div>
+    <details style="margin-top:4px">
+      <summary style="font-size:.8em;color:var(--muted);cursor:pointer;user-select:none">+ Add track manually</summary>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <input type="text" id="mdb-add-title" placeholder="Track title *" class="user-search" style="flex:2;min-width:160px;margin:0">
+        <input type="text" id="mdb-add-alias" placeholder="Alias (optional)" class="user-search" style="flex:2;min-width:120px;margin:0">
+        <button class="btn-sm btn-extend" onclick="addMusicDBTrack()">+ Add</button>
+      </div>
+    </details>
+  </div>
+
   <!-- Muted Users -->
   <div class="content">
     <div class="section-header">
@@ -586,6 +607,20 @@
       <button class="btn-sm" onclick="loadMutedUsers()">⟳ Refresh</button>
     </div>
     <div id="muted-list"><div class="empty">No muted users.</div></div>
+  </div>
+
+  <!-- Word Filter -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Word Filter</div>
+      <button class="btn-sm" onclick="loadWordFilter()">⟳ Refresh</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="wf-input" placeholder="Add word or phrase…" class="user-search"
+        style="flex:1;margin:0" onkeydown="if(event.key==='Enter')addFilterWord()">
+      <button class="btn-sm btn-extend" onclick="addFilterWord()">+ Add</button>
+    </div>
+    <div id="wf-list"><div class="empty">No words filtered. Chat is unfiltered.</div></div>
   </div>
 
   <!-- Audit Log -->
@@ -604,7 +639,7 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey(), loadWordFilter()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
       setInterval(loadLiveStats, 5000);
@@ -1364,6 +1399,123 @@
       const d = new Date(iso);
       return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
         d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ── Word Filter ───────────────────────────────────────────────────────────
+    async function loadWordFilter() {
+      try {
+        const res = await fetch('/api/admin/wordfilter');
+        if (!res.ok) return;
+        const { words } = await res.json();
+        renderWordFilter(words);
+      } catch {}
+    }
+
+    function renderWordFilter(words) {
+      const el = document.getElementById('wf-list');
+      if (!words || !words.length) {
+        el.innerHTML = '<div class="empty">No words filtered. Chat is unfiltered.</div>';
+        return;
+      }
+      el.innerHTML = words.map(w => `
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#1a1a1a;
+          border:1px solid #333;border-radius:20px;padding:3px 10px 3px 14px;margin:3px;font-size:.82em">
+          <span style="color:#ddd">${esc(w)}</span>
+          <button onclick="deleteFilterWord('${esc(w)}')"
+            style="background:none;border:none;color:#666;cursor:pointer;font-size:.9em;padding:0 2px"
+            title="Remove">✕</button>
+        </div>`).join('');
+    }
+
+    async function addFilterWord() {
+      const input = document.getElementById('wf-input');
+      const word = input.value.trim();
+      if (!word) return;
+      try {
+        const res = await fetch('/api/admin/wordfilter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word })
+        });
+        const d = await res.json();
+        if (res.ok) { input.value = ''; loadWordFilter(); toast('Word added'); }
+        else toast(d.error || 'Failed', true);
+      } catch { toast('Network error', true); }
+    }
+
+    async function deleteFilterWord(word) {
+      try {
+        const res = await fetch(`/api/admin/wordfilter/${encodeURIComponent(word)}`, { method: 'DELETE' });
+        if (res.ok) loadWordFilter();
+        else toast('Failed to remove', true);
+      } catch { toast('Network error', true); }
+    }
+
+    // ── Music DB Management ───────────────────────────────────────────────────
+    let _mdbTimeout = null;
+    function searchMusicDB() {
+      clearTimeout(_mdbTimeout);
+      _mdbTimeout = setTimeout(async () => {
+        const q = document.getElementById('mdb-search').value.trim();
+        if (q.length < 2) { document.getElementById('mdb-results').innerHTML = ''; return; }
+        try {
+          const res = await fetch(`/api/admin/music-db/search?q=${encodeURIComponent(q)}`);
+          if (!res.ok) return;
+          const { results } = await res.json();
+          renderMusicDBResults(results);
+        } catch {}
+      }, 300);
+    }
+
+    function renderMusicDBResults(results) {
+      const el = document.getElementById('mdb-results');
+      if (!results.length) { el.innerHTML = '<div class="empty">No matches.</div>'; return; }
+      el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.82em">
+        <thead><tr style="color:var(--muted);text-align:left">
+          <th style="padding:4px 8px">Title</th>
+          <th style="padding:4px 8px">Aliases</th>
+          <th style="padding:4px 8px">Plays</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${results.map(t => `
+          <tr style="border-top:1px solid #1e1e1e">
+            <td style="padding:5px 8px;color:#ddd">${esc(t.canonical)}</td>
+            <td style="padding:5px 8px;color:#555;font-size:.9em">${(t.aliases||[]).join(', ') || '—'}</td>
+            <td style="padding:5px 8px;color:#888">${t.plays||0}</td>
+            <td style="padding:5px 8px;text-align:right">
+              <button class="btn-sm btn-danger" onclick="deleteMusicDBTrack('${esc(t.canonical)}')">✕ Remove</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    async function addMusicDBTrack() {
+      const title = document.getElementById('mdb-add-title').value.trim();
+      const alias = document.getElementById('mdb-add-alias').value.trim();
+      if (!title) { toast('Title required', true); return; }
+      try {
+        const res = await fetch('/api/admin/music-db/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, aliases: alias ? [alias] : [] })
+        });
+        const d = await res.json();
+        if (res.ok) {
+          document.getElementById('mdb-add-title').value = '';
+          document.getElementById('mdb-add-alias').value = '';
+          toast('Track added to Music DB');
+          searchMusicDB();
+        } else toast(d.error || 'Failed', true);
+      } catch { toast('Network error', true); }
+    }
+
+    async function deleteMusicDBTrack(title) {
+      if (!confirm(`Remove "${title}" from music DB?`)) return;
+      try {
+        const res = await fetch(`/api/admin/music-db/entry/${encodeURIComponent(title)}`, { method: 'DELETE' });
+        if (res.ok) { toast('Track removed'); searchMusicDB(); }
+        else toast('Failed', true);
+      } catch { toast('Network error', true); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

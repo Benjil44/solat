@@ -4,6 +4,7 @@ const { verifyToken, findUser } = require('./users');
 const { addRequest, voteRequest, reactRequest, getRequests, getAcceptedQueue } = require('./requests');
 const { appendPostBan } = require('./flagged');
 const { incrementMessages } = require('./stats');
+const { checkText: filterCheck } = require('./wordfilter');
 
 // Map of ws → { username, isDJ, isAlive, lastMsgAt, msgCount }
 const clients = new Map();
@@ -190,6 +191,12 @@ function setupChatWS(wss) {
 
         const text = String(msg.text || '').trim().slice(0, MAX_MSG_LEN);
         if (!text) return;
+
+        // ── Word filter ────────────────────────────────────────────────────
+        if (!isDJ && filterCheck(text)) {
+          try { ws.send(JSON.stringify({ type: 'system', text: '\u26a0 Your message was blocked.', time: now })); } catch (_) {}
+          return;
+        }
 
         // ── /request command ───────────────────────────────────────────────
         if (text.startsWith('/request ')) {

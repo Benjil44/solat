@@ -208,4 +208,28 @@ function getDB() {
   return Object.values(_db).sort((a, b) => (b.score || 0) - (a.score || 0));
 }
 
-module.exports = { learnTrack, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB };
+/** Admin manually adds a track with optional aliases. */
+function manualAddTrack(title, aliases = []) {
+  const key = normalize(title);
+  if (!key) return false;
+  if (!_db[key]) {
+    _db[key] = { canonical: title, plays: 0, score: 0, aliases: [] };
+  }
+  for (const a of aliases) {
+    const an = normalize(a);
+    if (an && !_db[key].aliases.includes(an)) _db[key].aliases.push(an);
+  }
+  _saveDB();
+  return true;
+}
+
+/** Admin removes a track entirely from the DB. */
+function removeTrack(title) {
+  const key = normalize(title);
+  if (!_db[key]) return false;
+  delete _db[key];
+  _saveDB();
+  return true;
+}
+
+module.exports = { learnTrack, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB, manualAddTrack, removeTrack };

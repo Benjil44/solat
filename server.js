@@ -17,7 +17,8 @@ const paymentRoutes = require('./src/payment');
 const { verifyToken, findUser } = require('./src/users');
 const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
-const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB } = require('./src/music-db');
+const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB, manualAddTrack, removeTrack: removeDBTrack } = require('./src/music-db');
+const { getWords: getFilterWords, addWord: addFilterWord, removeWord: removeFilterWord } = require('./src/wordfilter');
 const { setChatBan } = require('./src/users');
 const { banRecord, clearRecord: clearFlagged, getAll: getAllFlagged } = require('./src/flagged');
 const { addRequest, voteRequest, reactRequest, setStatus: setReqStatus, removeRequest, clearFinished, getRequests, getTrending, cleanupExpired, moveRequest, getAcceptedQueue } = require('./src/requests');
@@ -450,6 +451,53 @@ app.post('/api/admin/reset-password/:username', requireAdmin, async (req, res) =
 // ─── Admin: audit log ────────────────────────────────────────────────────────
 app.get('/api/admin/audit', requireAdmin, (req, res) => {
   res.json({ log: getAuditLog(200) });
+});
+
+// ─── Admin: word filter ───────────────────────────────────────────────────────
+app.get('/api/admin/wordfilter', requireAdmin, (req, res) => {
+  res.json({ words: getFilterWords() });
+});
+
+app.post('/api/admin/wordfilter', requireAdmin, (req, res) => {
+  const { word } = req.body;
+  if (!word || !String(word).trim()) return res.status(400).json({ error: 'Word required' });
+  const added = addFilterWord(word);
+  if (!added) return res.status(409).json({ error: 'Word already in list' });
+  logAudit('admin', 'wordfilter-add', { word: String(word).trim().toLowerCase() });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/wordfilter/:word', requireAdmin, (req, res) => {
+  const removed = removeFilterWord(decodeURIComponent(req.params.word));
+  if (!removed) return res.status(404).json({ error: 'Word not found' });
+  logAudit('admin', 'wordfilter-remove', { word: req.params.word });
+  res.json({ ok: true });
+});
+
+// ─── Admin: music DB management ───────────────────────────────────────────────
+app.get('/api/admin/music-db/search', requireAdmin, (req, res) => {
+  const q = String(req.query.q || '').toLowerCase().trim();
+  if (q.length < 2) return res.json({ results: [] });
+  const results = getMusicDB()
+    .filter(t => t.canonical.toLowerCase().includes(q))
+    .slice(0, 20);
+  res.json({ results });
+});
+
+app.post('/api/admin/music-db/add', requireAdmin, (req, res) => {
+  const { title, aliases } = req.body;
+  if (!title || !String(title).trim()) return res.status(400).json({ error: 'Title required' });
+  manualAddTrack(String(title).trim(), Array.isArray(aliases) ? aliases : []);
+  logAudit('admin', 'music-db-add', { title });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/music-db/entry/:title', requireAdmin, (req, res) => {
+  const title = decodeURIComponent(req.params.title);
+  const ok = removeDBTrack(title);
+  if (!ok) return res.status(404).json({ error: 'Track not found' });
+  logAudit('admin', 'music-db-remove', { title });
+  res.json({ ok: true });
 });
 
 // ─── Admin: test push notification ───────────────────────────────────────────
