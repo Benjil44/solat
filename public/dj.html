@@ -657,8 +657,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span class="bpm-lbl">BPM</span>
       <span class="bpm-val" id="bpmA">—</span>
       <button class="tap-btn" onclick="tapTempo('A')">TAP</button>
-      <button class="nudge-btn" onclick="nudgeSpeed('A',-0.005)" title="Slow down slightly">◀</button>
-      <button class="nudge-btn" onclick="nudgeSpeed('A', 0.005)" title="Speed up slightly">▶</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('A',-0.01)" title="Slow down slightly">◀</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('A', 0.01)" title="Speed up slightly">▶</button>
       <button class="reset-tempo-btn" id="resetTempA" onclick="gradualResetTempo('A')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarA"></span></button>
       <button class="sync-btn" id="syncBtnA" onclick="syncBPM('A')" title="Match this deck's BPM to Deck B">SYNC</button>
     </div>
@@ -881,8 +881,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span class="bpm-lbl">BPM</span>
       <span class="bpm-val" id="bpmB">—</span>
       <button class="tap-btn" onclick="tapTempo('B')">TAP</button>
-      <button class="nudge-btn" onclick="nudgeSpeed('B',-0.005)" title="Slow down slightly">◀</button>
-      <button class="nudge-btn" onclick="nudgeSpeed('B', 0.005)" title="Speed up slightly">▶</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('B',-0.01)" title="Slow down slightly">◀</button>
+      <button class="nudge-btn" onclick="nudgeSpeed('B', 0.01)" title="Speed up slightly">▶</button>
       <button class="reset-tempo-btn" id="resetTempB" onclick="gradualResetTempo('B')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarB"></span></button>
       <button class="sync-btn" id="syncBtnB" onclick="syncBPM('B')" title="Match this deck's BPM to Deck A">SYNC</button>
     </div>
@@ -3259,7 +3259,9 @@ function syncBPM(id) {
 function nudgeSpeed(id, delta) {
   _cancelRamp(id); // cancel any in-progress auto-reset
   const slider = document.getElementById('speed' + id);
-  const current = parseFloat(slider.value);
+  // Read the true audio rate (not the snapped slider value) so repeated clicks accumulate correctly
+  const deck = decks[id];
+  const current = (deck.source ? deck.source.playbackRate.value : null) || parseFloat(slider.value) || 1;
   const next = Math.max(0.5, Math.min(2.0, Math.round((current + delta) * 1000) / 1000));
   slider.value = next;
   setSpeed(id, next);
