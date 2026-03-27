@@ -494,6 +494,7 @@
         <button class="btn-sm" onclick="toggleRevealKey()" id="reveal-key-btn">Reveal</button>
         <button class="btn-sm" onclick="copyStreamKey()" id="copy-key-btn" style="display:none">Copy</button>
         <button class="btn-sm btn-danger" onclick="rotateStreamKey()">⟳ Rotate</button>
+        <button class="btn-sm" onclick="sendTestPush()" title="Send a test push notification to all subscribers">🔔 Test Push</button>
       </div>
     </div>
     <div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;font-family:monospace">
@@ -1305,6 +1306,16 @@
           renderStreamKey();
           toast('Stream key rotated — copy it now!');
         } else { toast(data.error || 'Failed to rotate key', true); }
+      } catch { toast('Network error', true); }
+    }
+
+    // ── Test Push Notification ───────────────────────────────────────────────
+    async function sendTestPush() {
+      try {
+        const res = await fetch('/api/admin/push-test', { method: 'POST' });
+        const d   = await res.json();
+        if (res.ok) toast('Test push sent to all subscribers');
+        else toast(d.error || 'Push failed — check VAPID config', true);
       } catch { toast('Network error', true); }
     }
 

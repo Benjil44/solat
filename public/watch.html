@@ -943,9 +943,9 @@
         const dt       = new Date(_scheduledAt);
         const timeStr  = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateStr  = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-        const tzStr    = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        const tzAbbr   = dt.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
         return `<div id="overlay-sched" style="color:#ff8844;font-size:.88em;margin-top:-6px">
-          🗓 Going live ${dateStr} at <strong>${timeStr}</strong>${tzStr ? ' ' + tzStr : ''}
+          🗓 Going live ${dateStr} at <strong>${timeStr} ${tzAbbr}</strong>
           — <span id="sched-cd">${fmtCountdown(dt - Date.now())}</span>
         </div>`;
       })() : '';
