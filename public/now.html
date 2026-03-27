@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ff4400">
+<title>Now Playing</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#ff4400;--bg:#0a0a0a;--card:#141414;--border:#242424;--muted:#555}
+body{background:var(--bg);color:#fff;font-family:Arial,Helvetica,sans-serif;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:32px 28px;max-width:380px;width:100%;text-align:center;
+  box-shadow:0 8px 40px rgba(0,0,0,.7)}
+
+/* Status badge */
+.status-badge{display:inline-flex;align-items:center;gap:7px;
+  padding:5px 14px;border-radius:20px;font-size:.8em;font-weight:bold;
+  letter-spacing:1.5px;text-transform:uppercase;margin-bottom:20px;
+  background:#1a0000;color:var(--muted);border:1px solid #2a2a2a;transition:.3s}
+.status-badge.live{background:rgba(255,68,0,.15);color:var(--accent);
+  border-color:rgba(255,68,0,.4)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.status-badge.live .live-dot{background:var(--accent);
+  box-shadow:0 0 8px var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Cover art */
+.cover-wrap{width:160px;height:160px;margin:0 auto 20px;border-radius:12px;
+  overflow:hidden;background:#111;border:1px solid var(--border);position:relative}
+.cover-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.cover-disc{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  font-size:3.5em;animation:spin 4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cover-wrap.offline .cover-disc{animation-play-state:paused;opacity:.3}
+
+/* Track info */
+.track-title{font-size:1.25em;font-weight:900;letter-spacing:.5px;
+  line-height:1.3;margin-bottom:6px;word-break:break-word}
+.track-title.offline{color:var(--muted)}
+.track-next{font-size:.78em;color:#666;margin-bottom:18px;
+  min-height:1.2em;letter-spacing:.5px}
+.track-next span{color:#aaa}
+
+/* Viewer count */
+.viewer-row{display:flex;align-items:center;justify-content:center;gap:6px;
+  font-size:.8em;color:var(--muted);margin-bottom:22px}
+.vdot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+/* Watch button */
+.watch-btn{display:inline-block;padding:12px 32px;background:var(--accent);
+  color:#fff;border-radius:10px;font-weight:bold;font-size:.95em;
+  text-decoration:none;letter-spacing:1px;transition:background .15s}
+.watch-btn:hover{background:#e03d00}
+.watch-btn.offline{background:#222;color:#555;pointer-events:none}
+
+/* Updated time */
+.updated{font-size:.7em;color:#2a2a2a;margin-top:16px}
+
+/* Dark/light embed compatibility */
+@media(prefers-color-scheme:light){
+  body{background:#f0f0f0}
+  .card{background:#fff;border-color:#ddd;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+  .cover-wrap{background:#eee;border-color:#ddd}
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="status-badge" id="status-badge">
+    <div class="live-dot"></div>
+    <span id="status-text">LOADING</span>
+  </div>
+
+  <div class="cover-wrap offline" id="cover-wrap">
+    <div class="cover-disc" id="cover-disc">🎵</div>
+    <img id="cover-img" src="" alt="Cover" style="display:none" onerror="this.style.display='none';document.getElementById('cover-disc').style.display='flex'">
+  </div>
+
+  <div class="track-title offline" id="track-title">Not live right now</div>
+  <div class="track-next" id="track-next"></div>
+
+  <div class="viewer-row" id="viewer-row" style="display:none">
+    <div class="vdot"></div>
+    <span id="viewer-count">0</span> watching
+  </div>
+
+  <a class="watch-btn offline" id="watch-btn" href="/watch.html">Watch Live</a>
+
+  <div class="updated" id="updated-time"></div>
+</div>
+
+<script>
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/live');
+    if (!res.ok) return;
+    const d = await res.json();
+
+    const badge    = document.getElementById('status-badge');
+    const statusTx = document.getElementById('status-text');
+    const coverWrap= document.getElementById('cover-wrap');
+    const coverDisc= document.getElementById('cover-disc');
+    const coverImg = document.getElementById('cover-img');
+    const titleEl  = document.getElementById('track-title');
+    const nextEl   = document.getElementById('track-next');
+    const vcRow    = document.getElementById('viewer-row');
+    const vcEl     = document.getElementById('viewer-count');
+    const watchBtn = document.getElementById('watch-btn');
+    const updEl    = document.getElementById('updated-time');
+
+    if (d.live) {
+      badge.classList.add('live');
+      statusTx.textContent = 'LIVE';
+      coverWrap.classList.remove('offline');
+      titleEl.classList.remove('offline');
+      watchBtn.classList.remove('offline');
+
+      // Cover art
+      if (d.coverUrl) {
+        coverImg.src = d.coverUrl;
+        coverImg.style.display = 'block';
+        coverDisc.style.display = 'none';
+      } else {
+        coverImg.style.display = 'none';
+        coverDisc.style.display = 'flex';
+      }
+
+      titleEl.textContent = d.title || 'DJ Live Stream';
+      nextEl.innerHTML = d.nextTrack
+        ? `Up next: <span>${esc(d.nextTrack)}</span>`
+        : '';
+      vcEl.textContent = d.viewers || 0;
+      vcRow.style.display = 'flex';
+    } else {
+      badge.classList.remove('live');
+      statusTx.textContent = 'OFFLINE';
+      coverWrap.classList.add('offline');
+      titleEl.classList.add('offline');
+      watchBtn.classList.add('offline');
+      coverImg.style.display = 'none';
+      coverDisc.style.display = 'flex';
+
+      // Show next scheduled time if available
+      if (d.scheduledAt) {
+        const dt = new Date(d.scheduledAt);
+        titleEl.textContent = 'Next stream: ' + dt.toLocaleString();
+        nextEl.textContent = '';
+      } else {
+        titleEl.textContent = 'Not live right now';
+        nextEl.textContent = '';
+      }
+      vcRow.style.display = 'none';
+    }
+
+    updEl.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch {}
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

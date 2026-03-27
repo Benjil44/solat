@@ -284,6 +284,10 @@ app.get('/api/admin/viewer-history', requireAdmin, (req, res) => {
   res.json({ history: [...viewerHistory, ...now] });
 });
 
+app.get('/api/admin/viewers', requireAdmin, (req, res) => {
+  res.json({ viewers: [...viewers.keys()] });
+});
+
 app.get('/api/admin/stream-status', requireAdmin, (req, res) => {
   res.json({
     live: isLive || isBrowserLive(),
@@ -704,6 +708,22 @@ app.patch('/api/music-db/corrections/:id/reject', requireAdmin, (req, res) => {
   const ok = rejectCorrection(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found or already resolved' });
   res.json({ ok: true });
+});
+
+// Admin: export request history as CSV
+app.get('/api/admin/requests/export.csv', requireAdmin, (req, res) => {
+  const reqs = getRequests();
+  const q = v => `"${String(v || '').replace(/"/g, '""')}"`;
+  const csv = [
+    'title,requestedBy,requestedAt,votes,status',
+    ...reqs.map(r => [
+      q(r.title), q(r.requestedBy),
+      q(r.requestedAt), r.votes || 0, q(r.status),
+    ].join(','))
+  ].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="requests.csv"');
+  res.send(csv);
 });
 
 // Admin: export music DB as CSV

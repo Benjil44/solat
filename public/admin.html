@@ -626,6 +626,14 @@
   <!-- Audit Log -->
   <div class="content">
     <div class="section-header">
+      <div class="section-title">Request History</div>
+      <a class="btn-sm" href="/api/admin/requests/export.csv" download="requests.csv">⬇ Export CSV</a>
+    </div>
+    <div id="req-history-list"><div class="empty">No requests in this session</div></div>
+  </div>
+
+  <div class="content">
+    <div class="section-header">
       <div class="section-title">Audit Log</div>
       <button class="btn-sm" onclick="loadAuditLog()">⟳ Refresh</button>
     </div>
@@ -639,7 +647,7 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey(), loadWordFilter()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey(), loadWordFilter(), loadRequestHistory()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
       setInterval(loadLiveStats, 5000);
@@ -1366,6 +1374,35 @@
           toast(data.error || 'Failed to reset password', true);
         }
       } catch { toast('Network error', true); }
+    }
+
+    // ── Request History ───────────────────────────────────────────────────────
+    async function loadRequestHistory() {
+      try {
+        const res = await fetch('/api/requests', { headers: { 'x-admin-key': adminKey } });
+        if (!res.ok) return;
+        const { requests } = await res.json();
+        const el = document.getElementById('req-history-list');
+        if (!requests || !requests.length) {
+          el.innerHTML = '<div class="empty">No requests in this session</div>';
+          return;
+        }
+        const statusColor = { pending:'#aaa', accepted:'#44ff88', played:'#4488ff', rejected:'#ff4444' };
+        el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.8em">
+          <thead><tr style="color:var(--muted);border-bottom:1px solid #2a2a2a">
+            <th style="text-align:left;padding:5px 8px">Title</th>
+            <th style="text-align:left;padding:5px 8px">By</th>
+            <th style="text-align:center;padding:5px 8px">Votes</th>
+            <th style="text-align:center;padding:5px 8px">Status</th>
+          </tr></thead>
+          <tbody>${requests.map(r => `<tr style="border-bottom:1px solid #1a1a1a">
+            <td style="padding:5px 8px;color:#ddd">${esc(r.title)}</td>
+            <td style="padding:5px 8px;color:#888">${esc(r.requestedBy)}</td>
+            <td style="padding:5px 8px;text-align:center;color:var(--accent)">${r.votes}</td>
+            <td style="padding:5px 8px;text-align:center;color:${statusColor[r.status]||'#aaa'}">${r.status}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch {}
     }
 
     // ── Audit Log ─────────────────────────────────────────────────────────────
