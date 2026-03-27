@@ -484,6 +484,22 @@
     <div id="ls-top-list" style="padding:12px 0 4px"></div>
   </div>
 
+  <!-- Stream Key -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title" style="margin:0">Stream Key</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-sm" onclick="toggleRevealKey()" id="reveal-key-btn">Reveal</button>
+        <button class="btn-sm" onclick="copyStreamKey()" id="copy-key-btn" style="display:none">Copy</button>
+        <button class="btn-sm btn-danger" onclick="rotateStreamKey()">⟳ Rotate</button>
+      </div>
+    </div>
+    <div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;font-family:monospace">
+      <span id="stream-key-display" style="flex:1;font-size:1.05em;letter-spacing:2px;color:#888">••••••••••••••••••••••••</span>
+      <span style="font-size:.75em;color:#444">RTMP: rtmp://your-server/live/<span id="key-hint" style="color:#555">••••</span></span>
+    </div>
+  </div>
+
   <!-- User list -->
   <div class="content">
     <div class="section-title">Users</div>
@@ -585,7 +601,7 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
       setInterval(loadLiveStats, 5000);
@@ -1153,6 +1169,65 @@
         const res = await fetch(`/api/admin/chat-ban/${encodeURIComponent(username)}`, { method: 'DELETE' });
         if (res.ok) { toast(`${username} unmuted`); loadMutedUsers(); loadUsers(); }
         else toast('Failed', true);
+      } catch { toast('Network error', true); }
+    }
+
+    // ── Stream Key ────────────────────────────────────────────────────────────
+    let _streamKey = null;
+    let _keyRevealed = false;
+
+    async function loadStreamKey() {
+      try {
+        const res  = await fetch('/api/admin/stream-key');
+        if (!res.ok) return;
+        const data = await res.json();
+        _streamKey = data.key;
+        renderStreamKey();
+      } catch {}
+    }
+
+    function renderStreamKey() {
+      if (!_streamKey) return;
+      const display = document.getElementById('stream-key-display');
+      const hint    = document.getElementById('key-hint');
+      if (_keyRevealed) {
+        display.textContent = _streamKey;
+        display.style.color = '#fff';
+        hint.textContent    = _streamKey.slice(0, 6) + '…';
+      } else {
+        display.textContent = '•'.repeat(_streamKey.length);
+        display.style.color = '#555';
+        hint.textContent    = '••••';
+      }
+    }
+
+    function toggleRevealKey() {
+      _keyRevealed = !_keyRevealed;
+      document.getElementById('reveal-key-btn').textContent = _keyRevealed ? 'Hide' : 'Reveal';
+      document.getElementById('copy-key-btn').style.display = _keyRevealed ? 'inline-block' : 'none';
+      renderStreamKey();
+    }
+
+    function copyStreamKey() {
+      if (!_streamKey) return;
+      navigator.clipboard.writeText(_streamKey)
+        .then(() => toast('Stream key copied'))
+        .catch(() => { prompt('Copy stream key:', _streamKey); });
+    }
+
+    async function rotateStreamKey() {
+      if (!confirm('Rotate stream key?\nOBS/RTMP connections using the old key will be disconnected.')) return;
+      try {
+        const res  = await fetch('/api/admin/rotate-stream-key', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          _streamKey   = data.key;
+          _keyRevealed = true;
+          document.getElementById('reveal-key-btn').textContent = 'Hide';
+          document.getElementById('copy-key-btn').style.display = 'inline-block';
+          renderStreamKey();
+          toast('Stream key rotated — copy it now!');
+        } else { toast(data.error || 'Failed to rotate key', true); }
       } catch { toast('Network error', true); }
     }
 

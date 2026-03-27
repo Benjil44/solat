@@ -86,7 +86,7 @@ function clearSchedule() {
 // ─── Config ───────────────────────────────────────────────────────────────────
 const HTTP_PORT  = process.env.PORT       || 3000;
 const RTMP_PORT  = 1935;
-const STREAM_KEY = process.env.STREAM_KEY || 'djlive';
+let STREAM_KEY = process.env.STREAM_KEY || 'djlive';
 const HLS_PATH   = path.join(__dirname, 'media');
 
 // ─── Startup env validation ───────────────────────────────────────────────────
@@ -219,7 +219,17 @@ app.get('/api/status', requireAuth, (req, res) => {
 
 // HLS segments — auth required unless GUEST_WATCH=true is set
 // When guest watch is enabled anyone can view the stream without an account
-app.use('/live', (req, res, next) => {
+// Rate limit unauthenticated /live requests (guests) — 120 segments/min ≈ 4 concurrent streams
+const hlsGuestLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  skip: (req) => !!(req.cookies && req.cookies.token), // skip for logged-in users
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
+
+app.use('/live', hlsGuestLimiter, (req, res, next) => {
   if (process.env.GUEST_WATCH !== 'true') return requireAuth(req, res, next);
   next();
 }, (req, res, next) => {
@@ -425,6 +435,32 @@ app.post('/api/admin/push-test', requireAdmin, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─── Admin: stream key management ────────────────────────────────────────────
+const ENV_PATH = path.join(__dirname, '.env');
+
+app.get('/api/admin/stream-key', requireAdmin, (req, res) => {
+  res.json({ key: STREAM_KEY });
+});
+
+app.post('/api/admin/rotate-stream-key', requireAdmin, (req, res) => {
+  const newKey = require('crypto').randomBytes(12).toString('hex');
+  STREAM_KEY = newKey;
+  // Update .env file so new key survives restarts
+  try {
+    if (fs.existsSync(ENV_PATH)) {
+      let env = fs.readFileSync(ENV_PATH, 'utf8');
+      if (/^STREAM_KEY=/m.test(env)) {
+        env = env.replace(/^STREAM_KEY=.*/m, `STREAM_KEY=${newKey}`);
+      } else {
+        env += `\nSTREAM_KEY=${newKey}`;
+      }
+      fs.writeFileSync(ENV_PATH, env);
+    }
+  } catch (e) { console.warn('[stream-key] Could not update .env:', e.message); }
+  logAudit('admin', 'rotate-stream-key', {});
+  res.json({ key: newKey });
 });
 
 // ─── Track Requests ───────────────────────────────────────────────────────────

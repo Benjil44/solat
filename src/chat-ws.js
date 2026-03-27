@@ -176,6 +176,16 @@ function setupChatWS(wss) {
           return;
         }
 
+        // ── DJ: delete a chat message by ID ────────────────────────────────
+        if (msg.type === 'delete-msg' && msg.msgId && isDJ) {
+          // Remove from history
+          const idx = chatHistory.findIndex(m => m.id === msg.msgId);
+          if (idx !== -1) chatHistory.splice(idx, 1);
+          persistHistory();
+          broadcast({ type: 'msg-deleted', msgId: msg.msgId }, null);
+          return;
+        }
+
         if (msg.type !== 'chat') return;
 
         const text = String(msg.text || '').trim().slice(0, MAX_MSG_LEN);
@@ -201,6 +211,7 @@ function setupChatWS(wss) {
 
         const out = {
           type: 'chat',
+          id:   now.toString(36) + Math.random().toString(36).slice(2, 6),
           username,
           isDJ,
           text,

@@ -217,6 +217,9 @@
     .chat-msg.dj .who { color:var(--accent); }
     .chat-msg.viewer .who { color:#88aaff; }
     .chat-msg.system { color:#555; font-style:italic; }
+    .chat-msg.mentioned { background:rgba(255,100,0,.08); border-left:2px solid #ff6622; padding-left:6px; }
+    .mention { color:#88aaff; font-weight:bold; }
+    .mention.mention-me { color:#ff8844; }
     .chat-input-row { display:flex; gap:6px; padding:8px 10px;
       border-top:1px solid var(--border); flex-shrink:0; }
     .chat-input { flex:1; padding:7px 10px; background:#0a0a0a;
@@ -371,6 +374,8 @@
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
+      <button class="logout-btn" id="pip-btn" onclick="togglePiP()"
+              title="Picture-in-Picture" style="display:none">⛶</button>
       <button class="logout-btn" id="bell-btn" onclick="togglePushNotify()"
               title="Notify me when DJ goes live" style="display:none">🔕</button>
       <button class="logout-btn" onclick="showChangePwd()">🔑</button>
@@ -542,11 +547,12 @@
         if (data.subscription.daysLeft <= 14 && !sessionStorage.getItem('expiryDismissed')) {
           const d   = data.subscription.daysLeft;
           const txt = document.getElementById('expiry-text');
+          const subLink = ' <a href="/pricing.html" style="color:#ff6622;font-weight:bold">Subscribe →</a>';
           txt.innerHTML = d <= 0
-            ? '<strong>Your free trial has expired.</strong> Contact the DJ to keep your access.'
+            ? '<strong>Your free trial has expired.</strong>' + subLink
             : d === 1
-              ? '<strong>Your free trial expires today!</strong> Contact the DJ to keep your access.'
-              : `<strong>Your free trial expires in ${d} days.</strong> Contact the DJ to keep your access.`;
+              ? '<strong>Your free trial expires today!</strong>' + subLink
+              : `<strong>Your free trial expires in ${d} days.</strong>` + subLink;
           document.getElementById('expiry-banner').classList.add('show');
         }
       } else if (data.subscription.type === 'paid') {
@@ -556,14 +562,20 @@
         if (data.subscription.daysLeft <= 7 && !sessionStorage.getItem('expiryDismissed')) {
           const d = data.subscription.daysLeft;
           const txt = document.getElementById('expiry-text');
+          const renewLink = ' <a href="/pricing.html" style="color:#ff6622;font-weight:bold">Renew →</a>';
           txt.innerHTML = d <= 1
-            ? '<strong>Your subscription expires today!</strong> Contact the DJ to renew.'
-            : `<strong>Your subscription expires in ${d} days.</strong> Contact the DJ to renew.`;
+            ? '<strong>Your subscription expires today!</strong>' + renewLink
+            : `<strong>Your subscription expires in ${d} days.</strong>` + renewLink;
           document.getElementById('expiry-banner').classList.add('show');
         }
       } else {
         badge.textContent = 'EXPIRED';
         badge.className = 'badge-expired';
+        if (!sessionStorage.getItem('expiryDismissed')) {
+          document.getElementById('expiry-text').innerHTML =
+            '<strong>Your access has expired.</strong> <a href="/pricing.html" style="color:#ff6622;font-weight:bold">Subscribe to continue →</a>';
+          document.getElementById('expiry-banner').classList.add('show');
+        }
       }
 
       // Get a token for chat — re-login to get token string from cookie
@@ -892,6 +904,10 @@
       liveBadge.style.display = 'none';
       const hb = document.getElementById('health-badge');
       if (hb) hb.className = '';
+      // Hide PiP button and exit PiP if active
+      const pipBtn = document.getElementById('pip-btn');
+      if (pipBtn) pipBtn.style.display = 'none';
+      if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
       // Hide visualizer when stream ends
       const vc = document.getElementById('visualizer');
       if (vc) vc.style.display = 'none';
@@ -986,6 +1002,10 @@
       overlay.style.display = 'none';
       applyViewMode();
       document.getElementById('view-toggle-btn').classList.add('show');
+      // Show PiP button if browser supports it
+      if (document.pictureInPictureEnabled) {
+        document.getElementById('pip-btn').style.display = 'inline-block';
+      }
       // Start visualizer once stream is playing
       initVisualizer();
       // Hide push nudge once live
@@ -1079,6 +1099,16 @@
       sessionStorage.setItem('expiryDismissed', '1');
     }
 
+    async function togglePiP() {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (video && !video.paused) {
+          await video.requestPictureInPicture();
+        }
+      } catch { /* browser may block if not user-gesture or unsupported */ }
+    }
+
     function showChangePwd() {
       document.getElementById('pwd-current').value = '';
       document.getElementById('pwd-new').value = '';
@@ -1144,6 +1174,11 @@
           }
           if (msg.type === 'next-track') { updateNextTrack(msg.title); return; }
           if (msg.type === 'reaction') { spawnReactionEmoji(msg.emoji); return; }
+          if (msg.type === 'msg-deleted') {
+            const el = document.querySelector(`.chat-msg[data-msg-id="${CSS.escape(msg.msgId)}"]`);
+            if (el) el.remove();
+            return;
+          }
           if (msg.type === 'history') msg.messages.forEach(m => appendChat(m));
           else {
             appendChat(msg);
@@ -1168,25 +1203,38 @@
     }
 
     function appendChat(msg) {
-      const el = document.getElementById('chat-messages');
+      const el  = document.getElementById('chat-messages');
       const div = document.createElement('div');
-      const ts = msg.time || Date.now();
+      const ts  = msg.time || Date.now();
       div.className = 'chat-msg ' + (msg.type === 'system' ? 'system' : (msg.isDJ ? 'dj' : 'viewer'));
       div.dataset.ts = ts;
+      if (msg.id) div.dataset.msgId = msg.id;
       const exactTime = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const timeSpan = `<span class="msg-time" title="${exactTime}">${relTime(ts)}</span>`;
+      const timeSpan  = `<span class="msg-time" title="${exactTime}">${relTime(ts)}</span>`;
+
+      // Highlight @mentions of current user
+      const myName = (document.getElementById('username-display') || {}).textContent || '';
+      function renderText(text) {
+        return esc(text).replace(/@(\w+)/g, (_, name) => {
+          const cls = myName && name.toLowerCase() === myName.toLowerCase() ? 'mention mention-me' : 'mention';
+          return `<span class="${cls}">@${esc(name)}</span>`;
+        });
+      }
+
       if (msg.type === 'system') {
         div.innerHTML = esc(msg.text) + timeSpan;
       } else {
-        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${esc(msg.text)}${timeSpan}`;
+        const isMentioned = myName && msg.text && msg.text.toLowerCase().includes('@' + myName.toLowerCase());
+        if (isMentioned) div.classList.add('mentioned');
+        div.innerHTML = `<span class="who">${esc(msg.username)}:</span>${renderText(msg.text)}${timeSpan}`;
       }
+
       el.appendChild(div);
       el.scrollTop = el.scrollHeight;
       while (el.children.length > 200) el.removeChild(el.firstChild);
-      // Badge notification if chat is closed
       if (!chatOpen) {
         const btn = document.getElementById('chat-toggle-btn');
-        btn.textContent = '💬 Chat •';
+        btn.textContent = isMentioned ? '💬 Chat @' : '💬 Chat •';
       }
     }
 

@@ -1821,6 +1821,11 @@ function connectChat() {
         renderQueue(msg.queue || []);
         return;
       }
+      if (msg.type === 'msg-deleted') {
+        const el = document.querySelector(`.chat-msg[data-msg-id="${CSS.escape(msg.msgId)}"]`);
+        if (el) el.remove();
+        return;
+      }
       if (msg.type === 'history') {
         msg.messages.forEach(m => appendChat(m));
       } else {
@@ -1837,13 +1842,17 @@ function appendChat(msg) {
   const el = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = 'chat-msg ' + (msg.type === 'system' ? 'system' : (msg.isDJ ? 'dj' : 'viewer'));
+  if (msg.id) div.dataset.msgId = msg.id;
   if (msg.type === 'system') {
     div.textContent = msg.text;
   } else {
     const muteBtn = !msg.isDJ
       ? `<button class="mute-btn" onclick="chatMuteUser('${esc(msg.username)}')" title="Mute user">🚫</button>`
       : '';
-    div.innerHTML = `<span class="who">${esc(msg.username)}</span>${muteBtn}<span style="margin-left:4px">${esc(msg.text)}</span>`;
+    const delBtn  = msg.id
+      ? `<button class="mute-btn" onclick="deleteChatMsg('${esc(msg.id)}')" title="Delete message" style="opacity:.5;margin-left:2px">🗑</button>`
+      : '';
+    div.innerHTML = `<span class="who">${esc(msg.username)}</span>${muteBtn}${delBtn}<span style="margin-left:4px">${esc(msg.text)}</span>`;
   }
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
@@ -1854,6 +1863,11 @@ function appendChat(msg) {
     chatUnread++;
     updateChatBadge();
   }
+}
+
+function deleteChatMsg(msgId) {
+  if (!wsChat || wsChat.readyState !== WebSocket.OPEN) return;
+  wsChat.send(JSON.stringify({ type: 'delete-msg', msgId }));
 }
 
 function sendChat() {
