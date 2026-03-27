@@ -4,6 +4,7 @@ const fs      = require('fs');
 const path    = require('path');
 const { setSuspended, extendSubscription, deleteUser } = require('./users');
 const { createInvites, listInvites, deleteInvite } = require('./invites');
+const { logAudit } = require('./audit');
 
 const DB_PATH = path.join(__dirname, '../data/users.json');
 
@@ -83,6 +84,7 @@ router.post('/extend', requireAdmin, (req, res) => {
   }
   const newPaidUntil = extendSubscription(username, Number(days));
   if (!newPaidUntil) return res.status(404).json({ error: 'User not found' });
+  logAudit('admin', 'extend-subscription', { username, days: Number(days) });
   res.json({ success: true, username, paidUntil: newPaidUntil });
 });
 
@@ -91,6 +93,7 @@ router.patch('/users/:username/suspend', requireAdmin, (req, res) => {
   const { username } = req.params;
   const ok = setSuspended(username, true);
   if (!ok) return res.status(404).json({ error: 'User not found' });
+  logAudit('admin', 'suspend', { username });
   res.json({ success: true, username, suspended: true });
 });
 
@@ -98,6 +101,7 @@ router.patch('/users/:username/unsuspend', requireAdmin, (req, res) => {
   const { username } = req.params;
   const ok = setSuspended(username, false);
   if (!ok) return res.status(404).json({ error: 'User not found' });
+  logAudit('admin', 'unsuspend', { username });
   res.json({ success: true, username, suspended: false });
 });
 
@@ -106,6 +110,7 @@ router.delete('/users/:username', requireAdmin, (req, res) => {
   const { username } = req.params;
   const ok = deleteUser(username);
   if (!ok) return res.status(404).json({ error: 'User not found' });
+  logAudit('admin', 'delete-user', { username });
   res.json({ success: true });
 });
 

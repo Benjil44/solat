@@ -45,6 +45,16 @@
     /* Chat message timestamp */
     .msg-time { font-size:.75em; color:#444; margin-left:5px; }
     .chat-msg:hover .msg-time { color:#666; }
+    /* Visualizer */
+    #visualizer { display:none; width:100%; height:36px; flex-shrink:0;
+      background:#000; }
+    /* Push nudge banner */
+    #push-nudge { display:none; align-items:center; justify-content:center; gap:8px;
+      background:#0a0a1a; border-top:1px solid #223; padding:7px 14px;
+      font-size:.78em; color:#888; flex-shrink:0; }
+    #push-nudge button { background:#1a1a3a; border:1px solid #446;
+      color:#88aaff; border-radius:6px; padding:3px 10px; cursor:pointer; font-size:.85em; }
+    #push-nudge button:hover { border-color:#88aaff; }
     .user-info { display:flex; align-items:center; gap:10px; font-size:.82em; flex-shrink:0; }
     #sub-badge { padding:3px 9px; border-radius:20px; font-size:.75em; font-weight:bold; }
     .badge-trial   { background:#332200; color:#ffcc00; }
@@ -410,6 +420,12 @@
           <div id="overlay-title">Connecting…</div>
           <div id="overlay-sub">Please wait a moment</div>
         </div>
+      </div>
+      <canvas id="visualizer"></canvas>
+      <div id="push-nudge">
+        🔔 Get notified when DJ goes live
+        <button onclick="togglePushNotify();document.getElementById('push-nudge').style.display='none'">Enable</button>
+        <button onclick="document.getElementById('push-nudge').style.display='none'" style="background:none;border:none;color:#555;font-size:1em;cursor:pointer">✕</button>
       </div>
       <div id="bottombar">
         <span id="vol-label">Vol</span>
@@ -874,9 +890,13 @@
       video.src = '';
       isPlaying = false;
       liveBadge.style.display = 'none';
-      // Hide health badge when stream ends
       const hb = document.getElementById('health-badge');
       if (hb) hb.className = '';
+      // Hide visualizer when stream ends
+      const vc = document.getElementById('visualizer');
+      if (vc) vc.style.display = 'none';
+      if (_vizFrame) { cancelAnimationFrame(_vizFrame); _vizFrame = null; }
+      _vizInit = false; // allow re-init on next connect
       // Reset to artwork view and hide the toggle
       video.classList.remove('visible');
       document.getElementById('now-playing').classList.remove('hidden');
@@ -903,11 +923,16 @@
       overlay.style.display = 'flex';
 
       const hasSchedule = _scheduledAt && new Date(_scheduledAt).getTime() > Date.now() - 60000;
-      const schedStr = hasSchedule
-        ? `<div id="overlay-sched" style="color:#ff8844;font-size:.88em;margin-top:-6px">
-             🗓 Going live <span id="sched-cd">${fmtCountdown(new Date(_scheduledAt) - Date.now())}</span>
-           </div>`
-        : '';
+      const schedStr = hasSchedule ? (() => {
+        const dt       = new Date(_scheduledAt);
+        const timeStr  = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr  = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        const tzStr    = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        return `<div id="overlay-sched" style="color:#ff8844;font-size:.88em;margin-top:-6px">
+          🗓 Going live ${dateStr} at <strong>${timeStr}</strong>${tzStr ? ' ' + tzStr : ''}
+          — <span id="sched-cd">${fmtCountdown(dt - Date.now())}</span>
+        </div>`;
+      })() : '';
 
       overlay.innerHTML = `
         <div class="vinyl slow"></div>
@@ -928,6 +953,7 @@
       };
       tick();
       countdownInterval = setInterval(tick, 1000);
+      maybeShowPushNudge();
     }
 
     function showConnecting() {
@@ -958,9 +984,56 @@
     function hideOverlay() {
       clearInterval(countdownInterval);
       overlay.style.display = 'none';
-      // Show the video feed and enable the view-toggle button
       applyViewMode();
       document.getElementById('view-toggle-btn').classList.add('show');
+      // Start visualizer once stream is playing
+      initVisualizer();
+      // Hide push nudge once live
+      document.getElementById('push-nudge').style.display = 'none';
+    }
+
+    // ── Visualizer ────────────────────────────────────────────────────────────
+    let _vizInit = false, _vizFrame = null;
+    function initVisualizer() {
+      if (_vizInit) return;
+      const canvas = document.getElementById('visualizer');
+      if (!canvas || !window.AudioContext) return;
+      try {
+        const actx     = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = actx.createAnalyser();
+        analyser.fftSize = 64;
+        const src = actx.createMediaElementSource(video);
+        src.connect(analyser);
+        analyser.connect(actx.destination);
+        _vizInit = true;
+        canvas.style.display = 'block';
+        const ctx   = canvas.getContext('2d');
+        const data  = new Uint8Array(analyser.frequencyBinCount);
+        function draw() {
+          _vizFrame = requestAnimationFrame(draw);
+          const W = canvas.offsetWidth, H = canvas.offsetHeight;
+          if (canvas.width !== W * 2) { canvas.width = W * 2; canvas.height = H * 2; }
+          analyser.getByteFrequencyData(data);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const barW = canvas.width / data.length;
+          for (let i = 0; i < data.length; i++) {
+            const v = data[i] / 255;
+            const h = v * canvas.height;
+            const hue = 15 + v * 20; // orange → red spectrum
+            ctx.fillStyle = `hsl(${hue},100%,${40 + v * 30}%)`;
+            ctx.fillRect(i * barW, canvas.height - h, barW - 1, h);
+          }
+        }
+        draw();
+      } catch {}
+    }
+
+    // ── Push nudge — shown on offline overlay if no subscription ──────────────
+    function maybeShowPushNudge() {
+      if (!window._vapidPublicKey) return; // push not configured
+      if (_pushSub) return;                // already subscribed
+      const nudge = document.getElementById('push-nudge');
+      if (nudge) nudge.style.display = 'flex';
     }
 
     function applyViewMode() {

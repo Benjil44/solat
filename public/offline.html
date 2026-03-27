@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ff4500">
+  <title>Offline — DJ Stream</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0d0d0d;color:#ccc;font-family:Arial,Helvetica,sans-serif;
+      min-height:100vh;display:flex;align-items:center;justify-content:center;}
+    .wrap{text-align:center;padding:32px 24px;max-width:380px}
+    .icon{font-size:4em;margin-bottom:20px;opacity:.6}
+    h1{font-size:1.4em;color:#ff4400;letter-spacing:2px;margin-bottom:10px}
+    p{font-size:.9em;color:#666;line-height:1.6;margin-bottom:24px}
+    .btn{display:inline-block;padding:10px 28px;background:#1a0800;
+      border:1px solid #ff4400;color:#ff4400;border-radius:8px;
+      cursor:pointer;font-size:.9em;text-decoration:none;transition:.15s}
+    .btn:hover{background:#2a1000}
+    .tip{margin-top:18px;font-size:.78em;color:#444}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="icon">📡</div>
+    <h1>NO CONNECTION</h1>
+    <p>You're offline. Check your internet connection and try again — the stream will be here when you're back.</p>
+    <button class="btn" onclick="location.reload()">Try Again</button>
+    <div class="tip">If you were watching, the DJ will resume as soon as you reconnect.</div>
+  </div>
+</body>
+</html>

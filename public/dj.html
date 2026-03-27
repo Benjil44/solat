@@ -948,6 +948,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   <div class="pl-header">
     <span class="pl-lbl">PLAYLIST</span>
     <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
+    <button class="pl-add-btn" onclick="exportPlaylist()" title="Save playlist as JSON">💾 Save</button>
+    <button class="pl-add-btn" onclick="document.getElementById('plJsonInput').click()" title="Load saved playlist JSON">📂 Load</button>
+    <input type="file" id="plJsonInput" accept=".json" style="display:none"
+      onchange="importPlaylist(this.files[0]);this.value=''">
     <input type="file" id="plFileInput" accept="audio/*" multiple style="display:none"
       onchange="addToPlaylist(this.files);this.value=''">
     <div class="autodj-row">
@@ -1193,11 +1197,15 @@ function decodeFile(file, id) {
       deck.buffer = buffer;
       deck.duration = buffer.duration;
       deck.pauseOffset = 0;
-      document.getElementById('trackName' + id).textContent = file.name.replace(/\.[^.]+$/, '');
+      const tags = readID3v2(e.target.result);
+      const displayName = (tags.artist && tags.title) ? `${tags.artist} — ${tags.title}`
+        : (tags.title || file.name.replace(/\.[^.]+$/, ''));
+      document.getElementById('trackName' + id).textContent = displayName;
       drawWaveform(buffer, id);
       resetCues(id);
       resetLoop(id);
-      setTimeout(() => showBPM(id, detectBPM(buffer)), 0);
+      if (tags.bpm) { deck._bpm = tags.bpm; showBPM(id, tags.bpm); }
+      else { setTimeout(() => showBPM(id, detectBPM(buffer)), 0); }
       showKey(id, null);
       detectKey(buffer).then(k => showKey(id, k));
       toast('Loaded: ' + file.name.slice(0, 40));
@@ -2135,7 +2143,7 @@ async function drainLoadQueue() {
     playlist.push(t);
     renderPlaylist();
 
-    const buf = await decodeFileToBuffer(f, pct => {
+    const result = await decodeFileToBuffer(f, pct => {
       t.loadPct = pct;
       const i    = playlist.indexOf(t);
       if (i < 0) return;
@@ -2145,10 +2153,14 @@ async function drainLoadQueue() {
       if (pctEl) pctEl.textContent = pct + '%';
     });
 
-    if (!buf) {
+    if (!result) {
       toast('Could not decode: ' + t.name, true);
       playlist.splice(playlist.indexOf(t), 1);
     } else {
+      const { buf, tags } = result;
+      if (tags.artist && tags.title) t.name = `${tags.artist} — ${tags.title}`;
+      else if (tags.title) t.name = tags.title;
+      if (tags.bpm) t._bpm = tags.bpm;
       t.buffer   = buf;
       t.duration = buf.duration;
       t.loading  = false;
@@ -2184,6 +2196,7 @@ function decodeFileToBuffer(file, onProgress) {
         onProgress(Math.round(pct));
       }, TICK) : null;
 
+      const tags = readID3v2(e.target.result);
       const t0 = performance.now();
       try {
         const buf     = await audioCtx.decodeAudioData(e.target.result.slice(0));
@@ -2195,7 +2208,7 @@ function decodeFileToBuffer(file, onProgress) {
           // Sweep from wherever the bar is to 100% — speed proportional to distance
           // so a 30%→100% sweep feels the same as an 88%→100% snap
           await new Promise(done => {
-            const from  = Math.round(pct);
+            const from  = Math.max(Math.round(pct), 15);
             const steps = Math.max(8, Math.round((100 - from) * 0.45));
             let s = 0;
             const ft = setInterval(() => {
@@ -2205,7 +2218,7 @@ function decodeFileToBuffer(file, onProgress) {
             }, 22);
           });
         }
-        resolve(buf);
+        resolve({ buf, tags });
       } catch {
         if (timer) clearInterval(timer);
         resolve(null);
@@ -2213,6 +2226,89 @@ function decodeFileToBuffer(file, onProgress) {
     };
     reader.readAsArrayBuffer(file);
   });
+}
+
+// ── ID3v2 tag reader (title, artist, BPM from MP3 headers) ───────────────────
+function readID3v2(arrayBuffer) {
+  try {
+    const v = new DataView(arrayBuffer);
+    if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2)) !== 'ID3') return {};
+    const ver     = v.getUint8(3);
+    const tagSize = ((v.getUint8(6) & 0x7f) << 21) | ((v.getUint8(7) & 0x7f) << 14) |
+                    ((v.getUint8(8) & 0x7f) << 7)  |  (v.getUint8(9) & 0x7f);
+    const result  = {};
+    let off = 10;
+    const end = Math.min(tagSize + 10, arrayBuffer.byteLength);
+    while (off + 10 < end) {
+      const fid = String.fromCharCode(v.getUint8(off), v.getUint8(off+1), v.getUint8(off+2), v.getUint8(off+3));
+      if (fid === '\0\0\0\0') break;
+      const fsz = ver >= 4
+        ? ((v.getUint8(off+4)&0x7f)<<21)|((v.getUint8(off+5)&0x7f)<<14)|((v.getUint8(off+6)&0x7f)<<7)|(v.getUint8(off+7)&0x7f)
+        : (v.getUint8(off+4)<<24)|(v.getUint8(off+5)<<16)|(v.getUint8(off+6)<<8)|v.getUint8(off+7);
+      if (fsz <= 0 || fsz > 1000) { off += 10 + fsz; continue; }
+      if (['TIT2','TPE1','TBPM'].includes(fid)) {
+        const enc   = v.getUint8(off + 10);
+        const bytes = new Uint8Array(arrayBuffer, off + 11, fsz - 1);
+        let txt = '';
+        try {
+          if (enc === 1 || enc === 2) txt = new TextDecoder(enc === 2 ? 'utf-16be' : 'utf-16le').decode(bytes.slice(bytes[0] === 0xff || bytes[0] === 0xfe ? 2 : 0));
+          else txt = new TextDecoder(enc === 3 ? 'utf-8' : 'latin1').decode(bytes);
+        } catch { txt = new TextDecoder('latin1').decode(bytes); }
+        txt = txt.replace(/\0/g, '').trim();
+        if (fid === 'TIT2' && txt) result.title  = txt;
+        if (fid === 'TPE1' && txt) result.artist = txt;
+        if (fid === 'TBPM' && txt) result.bpm    = parseFloat(txt) || null;
+      }
+      off += 10 + fsz;
+    }
+    return result;
+  } catch { return {}; }
+}
+
+// ── Playlist save / load ──────────────────────────────────────────────────────
+function exportPlaylist() {
+  if (!playlist.length) { toast('Playlist is empty', true); return; }
+  const meta = playlist.map(t => ({
+    name:     t.name,
+    duration: t.duration || 0,
+    bpm:      t._bpm    || null,
+    key:      t._key    || null,
+    cues:     t.cues    || [null, null, null, null],
+  }));
+  const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'playlist-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Playlist saved as JSON');
+}
+
+function importPlaylist(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const meta = JSON.parse(e.target.result);
+      if (!Array.isArray(meta)) throw new Error('not array');
+      // Add as placeholder tracks (no audio buffer yet — user must re-add files)
+      meta.forEach(t => {
+        playlist.push({
+          name:     t.name || 'Unknown',
+          duration: t.duration || 0,
+          _bpm:     t.bpm  || null,
+          _key:     t.key  || null,
+          cues:     t.cues || [null, null, null, null],
+          buffer:   null,   // audio not loaded yet
+          loading:  false,
+          _plIdx:   null,
+        });
+      });
+      renderPlaylist();
+      toast(`Loaded ${meta.length} track(s) — drag audio files to restore audio`);
+    } catch { toast('Invalid playlist file', true); }
+  };
+  reader.readAsText(file);
 }
 
 function removeFromPlaylist(idx) {
@@ -3019,28 +3115,47 @@ function tapTempo(id) {
 
 // ── BPM Sync & Nudge ──────────────────────────────────────────
 function syncBPM(id) {
-  const other   = id === 'A' ? 'B' : 'A';
-  const myBPM   = decks[id]._bpm;
+  const other    = id === 'A' ? 'B' : 'A';
+  const myBPM    = decks[id]._bpm;
   const theirBPM = decks[other]._bpm;
 
-  if (!myBPM || myBPM <= 0)    { toast('Detect BPM on Deck ' + id + ' first (load a track)'); return; }
+  if (!myBPM || myBPM <= 0)       { toast('Detect BPM on Deck ' + id + ' first (load a track)'); return; }
   if (!theirBPM || theirBPM <= 0) { toast('Detect BPM on Deck ' + other + ' first'); return; }
 
-  // Calculate the speed ratio needed to match the other deck's BPM
-  const ratio = theirBPM / myBPM;
-  // Clamp to the speed slider range [0.5, 2.0]
+  // 1. Match BPM via playback rate
+  const ratio   = theirBPM / myBPM;
   const newRate = Math.max(0.5, Math.min(2.0, ratio));
-
-  const slider = document.getElementById('speed' + id);
-  slider.value = newRate;
+  const slider  = document.getElementById('speed' + id);
+  slider.value  = newRate;
   setSpeed(id, newRate);
+
+  // 2. Beat-phase alignment — nudge this deck so its beat phase matches the master deck
+  const masterDeck = decks[other];
+  const thisDeck   = decks[id];
+  if (masterDeck.playing && thisDeck.playing) {
+    const masterPos   = audioCtx.currentTime - masterDeck.startTime;
+    const masterBeat  = 60 / theirBPM;           // master beat length in seconds
+    const masterPhase = masterPos % masterBeat;   // where master is in its current beat (0..beatLen)
+
+    const thisPos     = audioCtx.currentTime - thisDeck.startTime;
+    const thisBeat    = 60 / (myBPM * newRate);   // this deck's beat length after rate change
+    const thisPhase   = thisPos % thisBeat;
+
+    // Calculate offset needed to align phases
+    let phaseDiff = masterPhase - thisPhase;
+    // Snap to nearest beat boundary (can go forward or back by < half a beat)
+    if (phaseDiff > thisBeat / 2)  phaseDiff -= thisBeat;
+    if (phaseDiff < -thisBeat / 2) phaseDiff += thisBeat;
+
+    const alignedPos = Math.max(0, thisPos + phaseDiff);
+    playDeck(id, alignedPos); // restart at aligned position
+  }
 
   const effectiveBPM = Math.round(myBPM * newRate);
   showBPM(id, effectiveBPM);
-
   const btn = document.getElementById('syncBtn' + id);
   if (btn) btn.classList.add('synced');
-  toast(`Deck ${id} synced → ${effectiveBPM} BPM (${Math.round(newRate * 100)}%)`);
+  toast(`Deck ${id} synced → ${effectiveBPM} BPM + beat aligned`);
 }
 
 function nudgeSpeed(id, delta) {
@@ -3182,6 +3297,7 @@ function loadPad(e, idx) {
       pads[idx].name   = file.name.replace(/\.[^.]+$/, '').slice(0, 18);
       renderPads();
       toast('Pad ' + (idx + 1) + ': ' + pads[idx].name);
+      localStorage.setItem('dj_pad_bank', JSON.stringify(pads.map((p, i) => ({ i, name: p.name || null }))));
     } catch { toast('Could not decode audio file', true); }
   };
   reader.readAsArrayBuffer(file);
@@ -3199,8 +3315,15 @@ function triggerPad(idx) {
   if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 200); }
 }
 
-// Initialise pads
+// Initialise pads — render then restore saved labels
 renderPads();
+(function() {
+  try {
+    JSON.parse(localStorage.getItem('dj_pad_bank') || '[]')
+      .forEach(({ i, name }) => { if (Number.isInteger(i) && i < PAD_COUNT && name) pads[i].name = name; });
+    renderPads();
+  } catch {}
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  INIT

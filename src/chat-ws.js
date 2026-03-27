@@ -1,3 +1,5 @@
+const fs   = require('fs');
+const path = require('path');
 const { verifyToken, findUser } = require('./users');
 const { addRequest, voteRequest, reactRequest, getRequests, getAcceptedQueue } = require('./requests');
 const { appendPostBan } = require('./flagged');
@@ -12,6 +14,29 @@ const RATE_MIN_MS  = 500;   // minimum ms between messages per client
 const FLOOD_LIMIT  = 10;    // messages within FLOOD_WINDOW_MS → disconnect
 const FLOOD_WIN_MS = 5000;  // flood detection window
 const chatHistory  = [];    // last N messages for late joiners
+
+// ── Chat history persistence ──────────────────────────────────────────────────
+const HISTORY_PATH = path.join(__dirname, '../data/chat-history.json');
+
+// Load saved history on startup
+try {
+  const saved = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
+  if (Array.isArray(saved)) chatHistory.push(...saved.slice(-MAX_HISTORY));
+} catch {}
+
+// Debounced save — writes at most once every 5 s to avoid excessive I/O
+let _saveTimer = null;
+function persistHistory() {
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    try {
+      const tmp = HISTORY_PATH + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(chatHistory));
+      fs.renameSync(tmp, HISTORY_PATH);
+    } catch {}
+  }, 5000);
+}
 
 // ── Ping/pong keepalive — runs every 30s ──────────────────────────────────────
 const PING_INTERVAL_MS = 30_000;
@@ -211,6 +236,7 @@ function broadcast(msg, skipWs) {
 function addToHistory(msg) {
   chatHistory.push(msg);
   if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
+  persistHistory();
 }
 
 function getChatClientCount() {

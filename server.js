@@ -23,12 +23,24 @@ const { banRecord, clearRecord: clearFlagged, getAll: getAllFlagged } = require(
 const { addRequest, voteRequest, reactRequest, setStatus: setReqStatus, removeRequest, clearFinished, getRequests, getTrending, cleanupExpired, moveRequest, getAcceptedQueue } = require('./src/requests');
 const { resetStats, recordViewerCount, getStats } = require('./src/stats');
 const { saveSub, removeSub, notifyLive } = require('./src/push');
+const { logAudit, getAuditLog } = require('./src/audit');
+const { updatePassword } = require('./src/users');
+const bcrypt = require('bcryptjs');
 
 // ─── Discord webhook ──────────────────────────────────────────────────────────
-function notifyDiscord(streamTitle) {
+function _discordPost(body) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) return;
-  const body = JSON.stringify({
+  try {
+    const u = new URL(webhookUrl);
+    const mod = u.protocol === 'https:' ? require('https') : require('http');
+    const req = mod.request(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } });
+    req.on('error', () => {}); req.write(body); req.end();
+  } catch {}
+}
+
+function notifyDiscord(streamTitle) {
+  _discordPost(JSON.stringify({
     content: null,
     embeds: [{
       title: '🎧 DJ is LIVE',
@@ -37,18 +49,14 @@ function notifyDiscord(streamTitle) {
       url: process.env.SITE_URL || undefined,
       timestamp: new Date().toISOString(),
     }]
-  });
-  try {
-    const u = new URL(webhookUrl);
-    const mod = u.protocol === 'https:' ? require('https') : require('http');
-    const req = mod.request(u, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-    });
-    req.on('error', () => {});
-    req.write(body);
-    req.end();
-  } catch {}
+  }));
+}
+
+function notifyDiscordOffline() {
+  _discordPost(JSON.stringify({
+    content: null,
+    embeds: [{ title: '🔴 DJ went offline', color: 0x333333, timestamp: new Date().toISOString() }]
+  }));
 }
 
 // ─── DJ Schedule ──────────────────────────────────────────────────────────────
@@ -113,8 +121,8 @@ app.use(cors(ALLOWED_ORIGIN
   : { origin: false }
 ));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 app.use(cookieParser());
 
 // Rate-limit login/register — max 15 attempts per minute per IP
@@ -154,10 +162,12 @@ setInterval(() => {
   for (const [k, t] of viewers) { if (t < cutoff) viewers.delete(k); }
   const nowLive = isLive || isBrowserLive();
   if (nowLive && !_wasLive) {
-    resetStats();  // browser DJ just went live
+    resetStats();
     notifyLive(getStreamTitle()).catch(() => {});
     notifyDiscord(getStreamTitle());
     clearSchedule();
+  } else if (!nowLive && _wasLive) {
+    notifyDiscordOffline();
   }
   _wasLive = nowLive;
   recordViewerCount(viewers.size);
@@ -296,6 +306,7 @@ app.post('/api/admin/title', requireAdmin, (req, res) => {
   if (!title) return res.status(400).json({ error: 'title required' });
   setStreamTitle(title);
   coverUrl = typeof cover === 'string' ? cover.trim() : '';
+  logAudit('admin', 'set-title', { title });
   // Clear next-track when the current track is set
   nextTrackTitle = '';
   nextTrackCover = '';
@@ -332,12 +343,19 @@ app.get('/api/profile', requireAuth, (req, res) => {
     subType  = 'expired';
     daysLeft = 0;
   }
-  const userRequests = getRequests()
-    .filter(r => r.requestedBy === user.username)
-    .map(r => ({ id: r.id, title: r.title, status: r.status, votes: r.votes, requestedAt: r.requestedAt }));
+  const allUserReqs = getRequests().filter(r => r.requestedBy === user.username);
+  const userRequests = allUserReqs.map(r => ({ id: r.id, title: r.title, status: r.status, votes: r.votes, requestedAt: r.requestedAt }));
+  const stats = {
+    total:    allUserReqs.length,
+    pending:  allUserReqs.filter(r => r.status === 'pending').length,
+    accepted: allUserReqs.filter(r => r.status === 'accepted').length,
+    played:   allUserReqs.filter(r => r.status === 'played').length,
+    rejected: allUserReqs.filter(r => r.status === 'rejected').length,
+  };
   res.json({
     user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt },
     requests: userRequests,
+    stats,
   });
 });
 
@@ -381,6 +399,32 @@ app.post('/api/admin/schedule', requireAdmin, (req, res) => {
   if (isNaN(ts)) return res.status(400).json({ error: 'Invalid date' });
   saveSchedule({ scheduledAt });
   res.json({ ok: true, scheduledAt });
+});
+
+// ─── Admin: password reset ────────────────────────────────────────────────────
+app.post('/api/admin/reset-password/:username', requireAdmin, async (req, res) => {
+  const { username } = req.params;
+  if (!findUser(username)) return res.status(404).json({ error: 'User not found' });
+  const tempPass = require('crypto').randomBytes(5).toString('hex'); // 10-char hex
+  const hashed   = await bcrypt.hash(tempPass, 10);
+  updatePassword(username, hashed);
+  logAudit('admin', 'reset-password', { username });
+  res.json({ ok: true, tempPassword: tempPass });
+});
+
+// ─── Admin: audit log ────────────────────────────────────────────────────────
+app.get('/api/admin/audit', requireAdmin, (req, res) => {
+  res.json({ log: getAuditLog(200) });
+});
+
+// ─── Admin: test push notification ───────────────────────────────────────────
+app.post('/api/admin/push-test', requireAdmin, async (req, res) => {
+  try {
+    await notifyLive('Test — push notifications are working!');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Track Requests ───────────────────────────────────────────────────────────
@@ -516,10 +560,9 @@ app.post('/api/admin/chat-ban/:username', requireAdmin, (req, res) => {
   const { username } = req.params;
   const ok = setChatBan(username, true);
   if (!ok) return res.status(404).json({ error: 'User not found' });
-  // Capture their recent chat history as evidence
   const history = getChatHistoryForUser(username);
   banRecord(username, 'DJ', history);
-  // Announce in chat
+  logAudit('admin', 'chat-ban', { username });
   djAnnounce(`${username} has been muted.`);
   res.json({ ok: true, username });
 });
@@ -530,6 +573,7 @@ app.delete('/api/admin/chat-ban/:username', requireAdmin, (req, res) => {
   const ok = setChatBan(username, false);
   if (!ok) return res.status(404).json({ error: 'User not found' });
   clearFlagged(username);
+  logAudit('admin', 'chat-unban', { username });
   djAnnounce(`${username} has been unmuted.`);
   res.json({ ok: true, username });
 });
@@ -688,24 +732,31 @@ app.use((err, req, res, next) => {
 const USERS_DB   = path.join(__dirname, 'data', 'users.json');
 const BACKUP_DIR = path.join(__dirname, 'data', 'backups');
 
+const BACKUP_FILES = ['users', 'music-db', 'trending', 'corrections', 'session-history', 'flagged-messages'];
+
 function backupUsers() {
-  if (!fs.existsSync(USERS_DB)) return;
+  const DATA_DIR = path.join(__dirname, 'data');
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const dest  = path.join(BACKUP_DIR, `users_${stamp}.json`);
-  try {
-    fs.copyFileSync(USERS_DB, dest);
-    // Keep only last 30 backups
-    const all = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith('users_') && f.endsWith('.json'))
-      .sort();
-    if (all.length > 30) {
-      all.slice(0, all.length - 30).forEach(f => {
-        try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch (_) {}
-      });
-    }
-    console.log('[BACKUP] users.json →', dest);
-  } catch (e) { console.error('[BACKUP] Failed:', e.message); }
+
+  for (const name of BACKUP_FILES) {
+    const src  = path.join(DATA_DIR, `${name}.json`);
+    if (!fs.existsSync(src)) continue;
+    const dest = path.join(BACKUP_DIR, `${name}_${stamp}.json`);
+    try {
+      fs.copyFileSync(src, dest);
+      // Keep only last 30 daily backups for this file
+      const all = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.startsWith(`${name}_`) && f.endsWith('.json'))
+        .sort();
+      if (all.length > 30) {
+        all.slice(0, all.length - 30).forEach(f => {
+          try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch (_) {}
+        });
+      }
+    } catch (e) { console.error(`[BACKUP] ${name}.json failed:`, e.message); }
+  }
+  console.log('[BACKUP] daily backup complete');
 }
 
 backupUsers();                              // run on startup

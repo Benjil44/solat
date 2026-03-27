@@ -399,6 +399,38 @@
     .session-dl-btn { padding: 3px 10px; background: transparent; border: 1px solid #333;
       border-radius: 5px; color: #888; cursor: pointer; font-size: .75em; white-space: nowrap; }
     .session-dl-btn:hover { border-color: #ff4400; color: #ff4400; }
+
+    /* ── User search ── */
+    .user-search {
+      width: 100%; max-width: 280px;
+      padding: 6px 12px; margin-bottom: 12px;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 6px;
+      color: #fff; font-size: 0.88em; outline: none;
+    }
+    .user-search:focus { border-color: #ff4400; }
+
+    /* ── Reset PW button ── */
+    .btn-resetpw {
+      padding: 5px 10px; background: #0d1a33;
+      border: 1px solid #3366ff; color: #6699ff;
+      border-radius: 6px; cursor: pointer; font-size: 0.82em;
+    }
+    .btn-resetpw:hover { background: #162244; }
+
+    /* ── Audit log ── */
+    #audit-list {
+      background: #111; border: 1px solid #222;
+      border-radius: 10px; overflow: hidden; max-height: 380px; overflow-y: auto;
+    }
+    .audit-row {
+      display: flex; gap: 10px; padding: 7px 12px;
+      border-bottom: 1px solid #1a1a1a; font-size: .82em; align-items: baseline;
+    }
+    .audit-row:last-child { border-bottom: none; }
+    .audit-time   { color: #555; white-space: nowrap; min-width: 118px; flex-shrink: 0; }
+    .audit-actor  { color: #ff8844; min-width: 55px; flex-shrink: 0; }
+    .audit-action { color: #ddd; min-width: 140px; flex-shrink: 0; }
+    .audit-details { color: #888; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -455,6 +487,7 @@
   <!-- User list -->
   <div class="content">
     <div class="section-title">Users</div>
+    <input type="text" class="user-search" id="user-search" placeholder="Filter by username…" oninput="renderUsers()">
     <div class="table-wrap">
       <table id="users-table">
         <thead>
@@ -536,6 +569,15 @@
     <div id="muted-list"><div class="empty">No muted users.</div></div>
   </div>
 
+  <!-- Audit Log -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">Audit Log</div>
+      <button class="btn-sm" onclick="loadAuditLog()">⟳ Refresh</button>
+    </div>
+    <div id="audit-list"><div class="empty">Loading…</div></div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
@@ -543,7 +585,7 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
       setInterval(loadLiveStats, 5000);
@@ -621,20 +663,22 @@
     }
 
     function renderUsers() {
-      const tbody = document.getElementById('users-tbody');
+      const tbody    = document.getElementById('users-tbody');
+      const q        = (document.getElementById('user-search')?.value || '').toLowerCase().trim();
+      const filtered = q ? users.filter(u => u.username.toLowerCase().includes(q)) : users;
 
-      // Stats
+      // Stats (always from full list)
       document.getElementById('stat-total').textContent   = users.length;
       document.getElementById('stat-trial').textContent   = users.filter(u => u.status === 'trial').length;
       document.getElementById('stat-paid').textContent    = users.filter(u => u.status === 'paid').length;
       document.getElementById('stat-expired').textContent = users.filter(u => u.status === 'expired').length;
 
-      if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">No users yet</td></tr>';
+      if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">${q ? 'No users match your search' : 'No users yet'}</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = users.map(u => {
+      tbody.innerHTML = filtered.map(u => {
         const chatBadge   = u.chatBanned ? ' <span class="badge" style="background:#1a0030;color:#cc66ff;font-size:.7em">MUTED</span>' : '';
         const statusBadge = u.suspended
           ? '<span class="badge badge-suspended">SUSPENDED</span>'
@@ -654,6 +698,7 @@
               <input type="number" class="days-input" id="days-${esc(u.username)}" value="30" min="1" max="3650">
               <button class="btn-extend" onclick="extendUser('${esc(u.username)}')">+ Extend</button>
               ${suspendBtn}
+              <button class="btn-resetpw" onclick="resetPassword('${esc(u.username)}')">Reset PW</button>
               <button class="btn-delete" onclick="deleteUser('${esc(u.username)}')">Delete</button>
             </div>
           </td>
@@ -1109,6 +1154,53 @@
         if (res.ok) { toast(`${username} unmuted`); loadMutedUsers(); loadUsers(); }
         else toast('Failed', true);
       } catch { toast('Network error', true); }
+    }
+
+    // ── Reset Password ────────────────────────────────────────────────────────
+    async function resetPassword(username) {
+      if (!confirm(`Reset password for "${username}"?\nA temporary password will be shown once — copy it before closing.`)) return;
+      try {
+        const res  = await fetch(`/api/admin/reset-password/${encodeURIComponent(username)}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          prompt(`Temp password for ${username} (copy now — won't be shown again):`, data.tempPassword);
+        } else {
+          toast(data.error || 'Failed to reset password', true);
+        }
+      } catch { toast('Network error', true); }
+    }
+
+    // ── Audit Log ─────────────────────────────────────────────────────────────
+    async function loadAuditLog() {
+      try {
+        const res = await fetch('/api/admin/audit');
+        if (!res.ok) return;
+        const { log } = await res.json();
+        renderAuditLog(log);
+      } catch {}
+    }
+
+    function renderAuditLog(log) {
+      const el = document.getElementById('audit-list');
+      if (!log || !log.length) {
+        el.innerHTML = '<div class="empty">No audit events yet.</div>';
+        return;
+      }
+      el.innerHTML = log.map(e => {
+        const details = Object.entries(e.details || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+        return `<div class="audit-row">
+          <span class="audit-time">${fmtDateTime(e.time)}</span>
+          <span class="audit-actor">${esc(String(e.actor))}</span>
+          <span class="audit-action">${esc(String(e.action))}</span>
+          <span class="audit-details" title="${esc(details)}">${esc(details)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function fmtDateTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+        d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -1,10 +1,11 @@
 // DJ Stream Service Worker
-const CACHE = 'djstream-v2';
+const CACHE = 'djstream-v3';
 
 // Static assets to pre-cache on install
 const PRECACHE = [
   '/watch.html',
   '/profile.html',
+  '/offline.html',
 ];
 
 self.addEventListener('install', e => {
@@ -49,7 +50,7 @@ self.addEventListener('fetch', e => {
           }
           return res;
         })
-        .catch(() => caches.match(e.request))
+        .catch(() => caches.match(e.request).then(cached => cached || caches.match('/offline.html')))
     );
   } else {
     e.respondWith(

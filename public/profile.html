@@ -39,6 +39,13 @@
     .sub-expired{border-color:#882200;color:#cc3300;background:#1a0500}
     .sub-days{margin-left:8px;font-size:.82em;color:var(--muted);font-weight:normal}
 
+    /* ── Stats mini-row ── */
+    .stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+    .mini-stat{flex:1;min-width:80px;background:#161616;border:1px solid var(--border);
+      border-radius:10px;padding:10px 14px;text-align:center}
+    .mini-stat .mval{font-size:1.6em;font-weight:900;color:var(--accent)}
+    .mini-stat .mlbl{font-size:.72em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+
     /* ── Requests card ── */
     .req-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
       padding:20px 24px}
@@ -79,6 +86,13 @@
 
     <div class="req-card">
       <div class="req-card-title">Your Requests</div>
+      <div class="stats-row" id="p-stats-row" style="display:none">
+        <div class="mini-stat"><div class="mval" id="ps-total">0</div><div class="mlbl">Total</div></div>
+        <div class="mini-stat"><div class="mval" id="ps-accepted">0</div><div class="mlbl">Accepted</div></div>
+        <div class="mini-stat"><div class="mval" id="ps-played">0</div><div class="mlbl">Played</div></div>
+        <div class="mini-stat"><div class="mval" id="ps-pending">0</div><div class="mlbl">Pending</div></div>
+        <div class="mini-stat"><div class="mval" id="ps-rejected">0</div><div class="mlbl">Rejected</div></div>
+      </div>
       <div id="p-req-list"><div class="req-empty">Loading…</div></div>
     </div>
   </div>
@@ -96,7 +110,7 @@
       render(d);
     }
 
-    function render({ user, requests }) {
+    function render({ user, requests, stats }) {
       document.title = user.username + ' — DJ Live';
       document.getElementById('p-username').textContent = user.username;
       document.getElementById('p-reg').textContent =
@@ -113,6 +127,15 @@
         days.textContent = '';
       } else {
         days.textContent = user.daysLeft + ' day' + (user.daysLeft !== 1 ? 's' : '') + ' remaining';
+      }
+
+      if (stats && stats.total > 0) {
+        document.getElementById('p-stats-row').style.display = 'flex';
+        document.getElementById('ps-total').textContent    = stats.total;
+        document.getElementById('ps-accepted').textContent = stats.accepted;
+        document.getElementById('ps-played').textContent   = stats.played;
+        document.getElementById('ps-pending').textContent  = stats.pending;
+        document.getElementById('ps-rejected').textContent = stats.rejected;
       }
 
       const list = document.getElementById('p-req-list');
