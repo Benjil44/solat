@@ -40,6 +40,12 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 .deck.a{border-top:3px solid #4488ff}
 .deck.b{border-top:3px solid var(--accent)}
 .deck-label{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.deck-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.clear-deck-btn{display:none;background:none;border:1px solid #555;color:#888;font-size:.7em;
+  padding:2px 8px;border-radius:4px;cursor:pointer;transition:.15s}
+.clear-deck-btn:hover{border-color:#ff5555;color:#ff5555}
+.deck.loaded .load-area{display:none}
+.deck.loaded .clear-deck-btn{display:inline-flex;align-items:center;gap:3px}
 
 /* ── Track load ── */
 .load-area{background:var(--bg);border:2px dashed var(--border);border-radius:8px;
@@ -52,7 +58,10 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
   text-overflow:ellipsis;color:var(--green)}
 
 /* ── Waveform / visualizer ── */
-.waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden;cursor:pointer}
+.waveform-wrap{position:relative;background:#0d0d0d;border-radius:6px;overflow:hidden;cursor:pointer;
+  border:2px solid transparent;transition:border-color .15s}
+.waveform-wrap.drag{border-color:var(--accent)}
+.deck:not(.loaded) .waveform-wrap{display:none}
 canvas.waveform{display:block;width:100%;height:60px}
 
 /* Waveform zoom indicator */
@@ -152,6 +161,20 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .go-live-btn.off:hover{background:#e03d00}
 .go-live-btn.on{background:#220000;border:2px solid var(--red);color:var(--red);
   animation:pulse-border 1.5s infinite}
+/* Track name toggle */
+.track-name-row{display:flex;gap:6px;margin-bottom:6px}
+.track-name-toggle{flex:1;padding:7px 4px;border:1px solid #444;border-radius:6px;
+  background:var(--panel);color:#888;cursor:pointer;font-size:.78em;font-weight:bold;
+  letter-spacing:.5px;transition:.15s}
+.track-name-toggle.active{background:#001a04;border-color:#44bb66;color:#44bb66}
+.track-name-toggle:hover:not(.active){border-color:#666;color:#ccc}
+/* Broadcast mode toggle */
+.bcast-mode-row{display:flex;gap:6px;margin-bottom:8px}
+.bcast-mode-btn{flex:1;padding:8px 4px;border:1px solid #444;border-radius:6px;
+  background:var(--panel);color:#888;cursor:pointer;font-size:.82em;font-weight:bold;
+  letter-spacing:.5px;transition:.15s}
+.bcast-mode-btn.active{background:#1a0800;border-color:var(--accent);color:var(--accent)}
+.bcast-mode-btn:hover:not(.active){border-color:#666;color:#ccc}
 @keyframes pulse-border{0%,100%{box-shadow:0 0 0 0 rgba(255,68,68,.4)}50%{box-shadow:0 0 0 8px rgba(255,68,68,0)}}
 
 /* Stream title */
@@ -525,6 +548,12 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .pl-del{padding:2px 7px;border:none;background:transparent;
   color:#555;cursor:pointer;font-size:.84em;flex-shrink:0}
 .pl-del:hover{color:#ff4444}
+.pl-votes{display:none;align-items:center;gap:2px;background:#1a0a00;
+  border:1px solid #ff6600;border-radius:10px;padding:1px 6px;font-size:.72em;
+  color:#ff9944;flex-shrink:0;cursor:pointer}
+.pl-votes.show{display:flex}
+.pl-votes:hover{background:#2a1200;border-color:#ff8844}
+.pl-votes.top-voted{border-color:#ffcc00;color:#ffcc00;background:#1a1400}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes deck-flash{0%{background:rgba(68,255,136,.18)}100%{background:var(--card)}}
 .deck.flash-load{animation:deck-flash .55s ease-out}
@@ -540,9 +569,20 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 @media(max-width:1000px){
   .studio{grid-template-columns:1fr 1fr}
   .center-col{
-    grid-column:1/-1;grid-row:1;
-    display:grid;grid-template-columns:1fr 1fr;gap:10px
+    grid-column:1/-1;grid-row:1
   }
+}
+
+/* Narrow tablet / large phone ≤800px */
+@media(max-width:800px){
+  /* Hide nudge+reset at this width — they overflow the BPM row */
+  .nudge-btn,.reset-tempo-btn{display:none}
+  /* Schedule row: wrap datetime input to its own line */
+  .sched-row{flex-wrap:wrap}
+  .sched-row input[type=datetime-local]{width:100%}
+  /* Playlist header: tighten gaps so buttons don't overflow */
+  .pl-header{gap:6px}
+  .pl-add-btn{padding:4px 9px;font-size:.77em}
 }
 
 /* Mobile ≤640px: single column stack */
@@ -576,9 +616,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .eq-col{gap:2px}
   .eq-val{font-size:.68em}
 
-  /* BPM row — hide nudge + reset on very small screens, keep tap+sync */
+  /* BPM row — already hidden nudge+reset at 800px; keep tap+sync tidy */
   .bpm-row{flex-wrap:wrap;gap:5px}
-  .nudge-btn,.reset-tempo-btn{display:none}
 
   /* Cue + loop rows — slightly smaller text */
   .cue-btn,.loop-btn{font-size:.68em;padding:5px 2px}
@@ -604,6 +643,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .playlist-panel{margin:0 8px 8px;padding:10px}
   #playlist-tracks{max-height:140px}
   .pl-deck-btn{display:none}
+  .pl-header{gap:5px}
+  .pl-add-btn{padding:4px 7px;font-size:.73em}
   .autodj-row{margin-left:0;width:100%}
   .xfade-lbl{display:none}
 
@@ -644,14 +685,23 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
   <!-- ═══ DECK A ═══ -->
   <div class="deck a" id="deckA">
-    <div class="deck-label">Deck A</div>
+    <div class="deck-header">
+      <div class="deck-label">Deck A</div>
+      <button class="clear-deck-btn" id="clearBtnA" onclick="clearDeck('A')" title="Eject track">✕ Clear</button>
+    </div>
 
-    <!-- Load track -->
+    <!-- Load track / Waveform (same slot — mutually exclusive) -->
     <div class="load-area" id="loadA" ondragover="dragOver(event,'A')" ondrop="dropFile(event,'A')" ondragleave="dragLeave('A')">
       <input type="file" id="fileInputA" accept="audio/*" onchange="loadFile(event,'A')">
       <div class="icon">🎵</div>
       <div class="hint">Click or drag a music file here</div>
     </div>
+    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'A')" onwheel="zoomWaveform(event,'A')"
+         ondragover="dragOverWave(event,'A')" ondrop="dropFile(event,'A')" ondragleave="dragLeaveWave('A')">
+      <canvas class="waveform" id="waveformA" height="60"></canvas>
+      <span class="zoom-badge" id="zoomBadgeA">1×</span>
+    </div>
+
     <div class="track-name" id="trackNameA">No track loaded</div>
     <div class="bpm-row">
       <span class="bpm-lbl">BPM</span>
@@ -665,12 +715,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="key-row">
       <span class="bpm-lbl">KEY</span>
       <span class="key-val" id="keyA">—</span>
-    </div>
-
-    <!-- Waveform -->
-    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'A')" onwheel="zoomWaveform(event,'A')">
-      <canvas class="waveform" id="waveformA" height="60"></canvas>
-      <span class="zoom-badge" id="zoomBadgeA">1×</span>
     </div>
 
     <!-- Transport -->
@@ -816,6 +860,13 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <button class="title-btn" onclick="updateNextTrack()">Next</button>
       </div>
 
+      <div class="track-name-row">
+        <button class="track-name-toggle active" id="trackNameToggle" onclick="toggleTrackName()">👁️ Show Track Names</button>
+      </div>
+      <div class="bcast-mode-row" id="bcastModeRow">
+        <button class="bcast-mode-btn active" id="modeAudioBtn" onclick="setBroadcastMode('audio')">🎵 Audio Only</button>
+        <button class="bcast-mode-btn" id="modeVideoBtn" onclick="setBroadcastMode('video')">📹 Audio + Video</button>
+      </div>
       <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
         ● GO LIVE
       </button>
@@ -869,13 +920,23 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
   <!-- ═══ DECK B ═══ -->
   <div class="deck b" id="deckB">
-    <div class="deck-label">Deck B</div>
+    <div class="deck-header">
+      <div class="deck-label">Deck B</div>
+      <button class="clear-deck-btn" id="clearBtnB" onclick="clearDeck('B')" title="Eject track">✕ Clear</button>
+    </div>
 
+    <!-- Load track / Waveform (same slot — mutually exclusive) -->
     <div class="load-area" id="loadB" ondragover="dragOver(event,'B')" ondrop="dropFile(event,'B')" ondragleave="dragLeave('B')">
       <input type="file" id="fileInputB" accept="audio/*" onchange="loadFile(event,'B')">
       <div class="icon">🎵</div>
       <div class="hint">Click or drag a music file here</div>
     </div>
+    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'B')" onwheel="zoomWaveform(event,'B')"
+         ondragover="dragOverWave(event,'B')" ondrop="dropFile(event,'B')" ondragleave="dragLeaveWave('B')">
+      <canvas class="waveform" id="waveformB" height="60"></canvas>
+      <span class="zoom-badge" id="zoomBadgeB">1×</span>
+    </div>
+
     <div class="track-name" id="trackNameB">No track loaded</div>
     <div class="bpm-row">
       <span class="bpm-lbl">BPM</span>
@@ -889,11 +950,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="key-row">
       <span class="bpm-lbl">KEY</span>
       <span class="key-val" id="keyB">—</span>
-    </div>
-
-    <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'B')" onwheel="zoomWaveform(event,'B')">
-      <canvas class="waveform" id="waveformB" height="60"></canvas>
-      <span class="zoom-badge" id="zoomBadgeB">1×</span>
     </div>
 
     <div class="transport">
@@ -991,6 +1047,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
     <button class="pl-add-btn" onclick="exportPlaylist()" title="Save playlist as JSON">💾 Save</button>
     <button class="pl-add-btn" onclick="document.getElementById('plJsonInput').click()" title="Load saved playlist JSON">📂 Load</button>
+    <button class="pl-add-btn" id="shareUpcomingBtn" onclick="shareUpcoming()" title="Share upcoming tracks with viewers">📤 Share</button>
     <input type="file" id="plJsonInput" accept=".json" style="display:none"
       onchange="importPlaylist(this.files[0]);this.value=''">
     <input type="file" id="plFileInput" accept="audio/*" multiple style="display:none"
@@ -1079,6 +1136,18 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 </div><!-- /page-body -->
 
 <div id="toast"></div>
+
+<!-- Go-Live preflight modal -->
+<div id="go-live-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);
+  z-index:500;align-items:center;justify-content:center">
+  <div style="background:#161616;border:1px solid #2a2a2a;border-radius:14px;
+    padding:28px 26px;max-width:400px;width:90%;display:flex;flex-direction:column;gap:16px;
+    box-shadow:0 8px 40px rgba(0,0,0,.8)">
+    <div style="font-size:1.05em;font-weight:bold;color:#fff" id="glm-title">⚠️ No Music in Deck</div>
+    <div style="font-size:.88em;color:#aaa;line-height:1.6" id="glm-msg"></div>
+    <div style="display:flex;flex-direction:column;gap:8px" id="glm-btns"></div>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -1172,7 +1241,7 @@ function makeDeck() {
     gainNode, bass, mid, high, lowpass,
     delay, delayFeedback, delayWetGain, reverbConv, reverbGain,
     analyser, outGain,
-    source: null, buffer: null,
+    source: null, buffer: null, trackName: '',
     startTime: 0, pauseOffset: 0,
     playing: false, duration: 0,
     fx: { echo: false, lowpass: false, reverb: false },
@@ -1214,6 +1283,7 @@ function loadFile(e, id) {
 function dropFile(e, id) {
   e.preventDefault();
   dragLeave(id);
+  dragLeaveWave(id);
   const file = e.dataTransfer.files[0];
   if (!file || !file.type.startsWith('audio')) { toast('Not an audio file'); return; }
   decodeFile(file, id);
@@ -1224,6 +1294,15 @@ function dragOver(e, id) {
 }
 function dragLeave(id) {
   document.getElementById('load' + id).classList.remove('drag');
+}
+function dragOverWave(e, id) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag');
+}
+function dragLeaveWave(id) {
+  const deck = document.getElementById('deck' + id);
+  const wrap = deck.querySelector('.waveform-wrap');
+  if (wrap) wrap.classList.remove('drag');
 }
 
 function decodeFile(file, id) {
@@ -1241,6 +1320,7 @@ function decodeFile(file, id) {
       const tags = readID3v2(e.target.result);
       const displayName = (tags.artist && tags.title) ? `${tags.artist} — ${tags.title}`
         : (tags.title || file.name.replace(/\.[^.]+$/, ''));
+      deck.trackName = displayName;
       document.getElementById('trackName' + id).textContent = displayName;
       drawWaveform(buffer, id);
       resetCues(id);
@@ -1249,6 +1329,7 @@ function decodeFile(file, id) {
       else { setTimeout(() => showBPM(id, detectBPM(buffer)), 0); }
       showKey(id, null);
       detectKey(buffer).then(k => showKey(id, k));
+      document.getElementById('deck' + id).classList.add('loaded');
       toast('Loaded: ' + file.name.slice(0, 40));
       // If a manual fade was waiting for this deck, trigger it now
       if (pendingFadeTo !== null && (pendingFadeTo === 1 ? 'B' : 'A') === id) {
@@ -1290,6 +1371,10 @@ function playDeck(id, offset) {
     if (deck.playing) { deck.playing = false; deck.pauseOffset = 0; updatePlayBtn(id); }
   };
   updatePlayBtn(id);
+  // Auto-push track name as stream title when a deck starts playing
+  if (offset === 0 && deck.trackName) {
+    pushTrackTitle(deck.trackName);
+  }
 }
 
 function pauseDeck(id) {
@@ -1303,6 +1388,39 @@ function pauseDeck(id) {
 function stopDeck(id) {
   pauseDeck(id);
   decks[id].pauseOffset = 0;
+}
+
+function clearDeck(id) {
+  const deck = decks[id];
+  if (deck.playing) { try { deck.source.stop(); } catch {} }
+  deck.buffer      = null;
+  deck.source      = null;
+  deck.playing     = false;
+  deck.pauseOffset = 0;
+  deck.duration    = 0;
+  deck._bpm        = null;
+  deck._plIdx      = null;
+  _cancelRamp(id);
+  resetCues(id);
+  resetLoop(id);
+  decks[id].trackName = '';
+  // Reset displays
+  document.getElementById('trackName' + id).textContent = 'No track loaded';
+  document.getElementById('bpm'       + id).textContent = '—';
+  document.getElementById('key'       + id).textContent = '—';
+  document.getElementById('time'      + id).textContent = '0:00 / 0:00';
+  document.getElementById('speedVal'  + id).textContent = '100%';
+  const sl = document.getElementById('speed' + id);
+  if (sl) sl.value = 1;
+  // Clear waveform canvas
+  const cv = document.getElementById('waveform' + id);
+  if (cv) { const ctx2 = cv.getContext('2d'); ctx2.clearRect(0, 0, cv.width, cv.height); }
+  // Reset file input so same file can be re-loaded
+  const fi = document.getElementById('fileInput' + id);
+  if (fi) fi.value = '';
+  // Remove loaded class → shows load area, hides clear button
+  document.getElementById('deck' + id).classList.remove('loaded');
+  updatePlayBtn(id);
 }
 
 function seekDeck(id, secs) {
@@ -1706,9 +1824,91 @@ let reconnectCount  = 0;
 const MAX_RECONNECT = 8;
 const ADMIN_KEY  = new URLSearchParams(window.location.search).get('key') || '';
 let   STREAM_KEY = 'djlive'; // populated from status API on load
+let   broadcastMode = 'audio'; // 'audio' | 'video' — default audio-only
+
+function setBroadcastMode(mode) {
+  if (isLive) return; // can't change while live
+  broadcastMode = mode;
+  document.getElementById('modeAudioBtn').classList.toggle('active', mode === 'audio');
+  document.getElementById('modeVideoBtn').classList.toggle('active', mode === 'video');
+}
 
 function toggleLive() {
-  if (isLive) stopLive(); else startLive();
+  if (isLive) { stopLive(); return; }
+
+  const deckAReady  = decks['A'].buffer != null;
+  const deckBReady  = decks['B'].buffer != null;
+  const readyTracks = playlist.filter(t => t.buffer && !t.loading);
+
+  if (deckAReady || deckBReady) {
+    // At least one deck loaded — go live immediately
+    startLive();
+    return;
+  }
+
+  // No music in either deck
+  const modal = document.getElementById('go-live-modal');
+  const title = document.getElementById('glm-title');
+  const msg   = document.getElementById('glm-msg');
+  const btns  = document.getElementById('glm-btns');
+
+  if (readyTracks.length > 0) {
+    title.textContent = '⚠️ No Music in Deck';
+    msg.textContent   = `Your playlist has ${readyTracks.length} track${readyTracks.length > 1 ? 's' : ''} but no deck is loaded. What would you like to do?`;
+    btns.innerHTML = `
+      <button onclick="glmLoadAndPlay()" style="padding:11px;border:none;border-radius:8px;
+        background:#ff4400;color:#fff;font-weight:bold;cursor:pointer;font-size:.9em">
+        ▶ Load First Track &amp; Go Live
+      </button>
+      <button onclick="glmBroadcastEmpty()" style="padding:11px;border:1px solid #444;border-radius:8px;
+        background:transparent;color:#aaa;cursor:pointer;font-size:.88em">
+        🎙 Broadcast with Empty Deck
+      </button>
+      <button onclick="glmClose()" style="padding:9px;border:none;border-radius:8px;
+        background:transparent;color:#555;cursor:pointer;font-size:.85em">
+        ✕ Cancel
+      </button>`;
+  } else {
+    title.textContent = '⚠️ No Music Available';
+    msg.textContent   = 'No music is loaded in any deck and your playlist is empty. Add audio files to your playlist first, or broadcast with no audio.';
+    btns.innerHTML = `
+      <button onclick="document.getElementById('plFileInput').click();glmClose()"
+        style="padding:11px;border:none;border-radius:8px;background:#2a2a2a;
+          color:#ccc;font-weight:bold;cursor:pointer;font-size:.9em">
+        + Add Tracks to Playlist
+      </button>
+      <button onclick="glmBroadcastEmpty()" style="padding:11px;border:1px solid #444;border-radius:8px;
+        background:transparent;color:#aaa;cursor:pointer;font-size:.88em">
+        🎙 Broadcast Anyway (no audio)
+      </button>
+      <button onclick="glmClose()" style="padding:9px;border:none;border-radius:8px;
+        background:transparent;color:#555;cursor:pointer;font-size:.85em">
+        ✕ Cancel
+      </button>`;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function glmClose() {
+  document.getElementById('go-live-modal').style.display = 'none';
+}
+
+function glmBroadcastEmpty() {
+  glmClose();
+  startLive();
+}
+
+function glmLoadAndPlay() {
+  glmClose();
+  const readyTracks = playlist.filter(t => t.buffer && !t.loading);
+  if (!readyTracks.length) { startLive(); return; }
+  const idx = playlist.indexOf(readyTracks[0]);
+  loadPlaylistTrack(idx, 'A');
+  playlistCursor = idx + 1;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  playDeck('A', 0);
+  startLive();
 }
 
 function startLive() {
@@ -1717,10 +1917,20 @@ function startLive() {
   // Build combined stream (reuse existing on reconnect so audio is uninterrupted)
   if (!broadcastStream) {
     const audioStream = broadcastDest.stream;
-    const videoTrack  = broadcastVideoTrack
-      || document.getElementById('viz-canvas').captureStream(25).getVideoTracks()[0];
-    broadcastStream = new MediaStream([...audioStream.getAudioTracks(), videoTrack]);
+    if (broadcastMode === 'audio') {
+      // Audio-only: no video track — just the mixed audio output
+      broadcastStream = new MediaStream(audioStream.getAudioTracks());
+    } else {
+      // Audio + Video: audio + canvas visualizer (or camera/screen if set)
+      const videoTrack = broadcastVideoTrack
+        || document.getElementById('viz-canvas').captureStream(25).getVideoTracks()[0];
+      broadcastStream = new MediaStream([...audioStream.getAudioTracks(), videoTrack]);
+    }
   }
+
+  // Disable mode toggle while live
+  document.getElementById('bcastModeRow').style.opacity = '0.4';
+  document.getElementById('bcastModeRow').style.pointerEvents = 'none';
 
   reconnectCount = 0;
   connectStreamWS();
@@ -1728,20 +1938,15 @@ function startLive() {
 
 function connectStreamWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url   = `${proto}://${location.host}/ws/stream?key=${encodeURIComponent(ADMIN_KEY)}&mode=video`;
+  const url   = `${proto}://${location.host}/ws/stream?key=${encodeURIComponent(ADMIN_KEY)}&mode=${broadcastMode}`;
   wsStream = new WebSocket(url);
   wsStream.binaryType = 'arraybuffer';
 
   wsStream.onopen = () => {
-    const mimeTypes = [
-      'video/webm;codecs=h264,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm;codecs=vp9,opus',
-      'video/webm',
-      'audio/webm;codecs=opus',
-      'audio/webm'
-    ];
-    const mimeType = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+    const mimeTypes = broadcastMode === 'audio'
+      ? ['audio/webm;codecs=opus', 'audio/webm']
+      : ['video/webm;codecs=h264,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'audio/webm;codecs=opus', 'audio/webm'];
+    const mimeType = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || 'audio/webm';
 
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     recorder = new MediaRecorder(broadcastStream, { mimeType, videoBitsPerSecond: 2500000, audioBitsPerSecond: 192000 });
@@ -1758,6 +1963,7 @@ function connectStreamWS() {
     document.getElementById('live-dot').classList.add('on');
     document.getElementById('live-text').textContent = 'ON AIR';
     toast(reconnectCount === 0 ? 'You are LIVE!' : 'Reconnected!');
+    if (reconnectCount === 0) startVotesPoll();
   };
 
   wsStream.onerror = () => {};  // handled by onclose
@@ -1786,12 +1992,12 @@ function connectStreamWS() {
   wsStream.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
-      if (msg.type === 'error') { toast(msg.msg, true); stopLive(); }
+      if (msg.type === 'error') { toast(msg.msg, true); stopLive(true); }
     } catch {}
   };
 }
 
-function stopLive() {
+function stopLive(silent = false) {
   isLive = false;
   broadcastStream = null;
   reconnectCount = MAX_RECONNECT; // prevent reconnect loop
@@ -1801,7 +2007,11 @@ function stopLive() {
   document.getElementById('goLiveBtn').className = 'go-live-btn off';
   document.getElementById('live-dot').classList.remove('on');
   document.getElementById('live-text').textContent = 'OFF AIR';
-  toast('Broadcast stopped');
+  // Re-enable mode toggle
+  document.getElementById('bcastModeRow').style.opacity = '';
+  document.getElementById('bcastModeRow').style.pointerEvents = '';
+  stopVotesPoll();
+  if (!silent) toast('Broadcast stopped');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2059,6 +2269,109 @@ function esc(s) {
 // ═══════════════════════════════════════════════════════════════
 //  STREAM TITLE + STATUS POLLING
 // ═══════════════════════════════════════════════════════════════
+// DJ toggle: show or hide track names from viewers
+function toggleTrackName() {
+  showTrackName = !showTrackName;
+  const btn = document.getElementById('trackNameToggle');
+  btn.classList.toggle('active', showTrackName);
+  btn.textContent = showTrackName ? '👁️ Show Track Names' : '🙈 Track Names Hidden';
+  toast(showTrackName ? 'Track names visible to viewers' : 'Track names hidden from viewers');
+  if (!showTrackName) {
+    // Clear current track name from viewers immediately
+    fetch('/api/admin/title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ title: 'DJ Live Session', cover: '' })
+    }).catch(() => {});
+  } else {
+    // Re-push the current track name now that visibility is back on
+    const currentTitle = document.getElementById('streamTitle').value.trim();
+    if (currentTitle) pushTrackTitle(currentTitle);
+  }
+}
+
+// Auto-called when a deck starts playing — pushes track name silently (if toggle on)
+async function pushTrackTitle(name) {
+  document.getElementById('streamTitle').value = name;
+  if (!showTrackName) return;  // DJ has hidden track names
+  const cover = document.getElementById('coverUrl').value.trim();
+  try {
+    await fetch('/api/admin/title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ title: name, cover })
+    });
+    setTimeout(fetchSetlist, 300);
+  } catch (_) {}
+}
+
+// Share next N tracks from the playlist with viewers
+async function shareUpcoming() {
+  const remaining = playlist.slice(playlistCursor).filter(t => !t.loading && t._id);
+  const toShare   = remaining.slice(0, 8);
+  if (!toShare.length) { toast('No upcoming tracks to share', true); return; }
+  const tracks = toShare.map(t => ({ id: t._id, title: t.name }));
+  try {
+    const res = await fetch('/api/admin/upcoming', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ tracks }),
+    });
+    if (res.ok) {
+      toast(`Shared ${tracks.length} upcoming track${tracks.length > 1 ? 's' : ''} with viewers`);
+      loadUpcomingVotes();
+    } else toast('Failed to share upcoming', true);
+  } catch (_) { toast('Failed to share upcoming', true); }
+}
+
+// Promote a track to top of upcoming (called when DJ clicks vote badge)
+async function prioritizeTrack(trackId, e) {
+  e && e.stopPropagation();
+  try {
+    const res = await fetch('/api/admin/upcoming/prioritize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ trackId }),
+    });
+    if (res.ok) {
+      // Move track to just after current in playlist
+      const idx = playlist.findIndex(t => t._id === trackId);
+      const after = autoDJActive ? autoDJCurrentIdx + 1 : playlistCursor;
+      if (idx > 0 && idx !== after) {
+        const [item] = playlist.splice(idx, 1);
+        playlist.splice(Math.min(after, playlist.length), 0, item);
+        if (autoDJActive && autoDJCurrentIdx >= after && autoDJCurrentIdx < idx) autoDJCurrentIdx++;
+        else if (autoDJActive && autoDJCurrentIdx > idx) autoDJCurrentIdx--;
+        renderPlaylist();
+      }
+      toast('Track moved to play next!');
+    } else toast('Failed to prioritize', true);
+  } catch (_) { toast('Failed to prioritize', true); }
+}
+
+// Fetch vote counts from server and update local map
+async function loadUpcomingVotes() {
+  try {
+    const res = await fetch('/api/upcoming');
+    if (!res.ok) return;
+    const d = await res.json();
+    upcomingVotes = {};
+    for (const t of d.tracks) upcomingVotes[t.id] = t.votes;
+    renderPlaylist(); // refresh vote badges
+  } catch (_) {}
+}
+
+// Start/stop polling for vote counts while stream is live
+function startVotesPoll() {
+  if (_votesPollTimer) return;
+  loadUpcomingVotes();
+  _votesPollTimer = setInterval(loadUpcomingVotes, 8000);
+}
+function stopVotesPoll() {
+  clearInterval(_votesPollTimer);
+  _votesPollTimer = null;
+}
+
 async function updateTitle() {
   const title = document.getElementById('streamTitle').value.trim();
   const cover = document.getElementById('coverUrl').value.trim();
@@ -2201,12 +2514,15 @@ function toast(msg, isErr) {
 // ═══════════════════════════════════════════════════════════════
 //  PLAYLIST
 // ═══════════════════════════════════════════════════════════════
-let playlist     = [];   // { name, duration, buffer }
+let playlist     = [];   // { name, duration, buffer, _id }
 let dragSrcIdx   = null; // index of playlist item being dragged for reorder
 let dblClickDeck = 'A'; // next deck to receive a double-clicked playlist item
 let loadQueue       = [];   // pending File objects
 let isProcessing    = false;
 let playlistCursor  = 0;    // next auto-load index after a crossfade completes
+let showTrackName   = true; // DJ toggle: show/hide track name to viewers
+let upcomingVotes   = {};   // trackId → vote count (fetched from server)
+let _votesPollTimer = null;
 
 // ── Hardware-adaptive decode speed (ms per byte) ──────────────
 // Persisted via localStorage so calibration carries across sessions.
@@ -2237,7 +2553,7 @@ async function drainLoadQueue() {
   isProcessing = true;
   while (loadQueue.length) {
     const f = loadQueue.shift();
-    const t = { name: f.name.replace(/\.[^.]+$/, ''), duration: 0, buffer: null, loading: true, loadPct: 0 };
+    const t = { name: f.name.replace(/\.[^.]+$/, ''), duration: 0, buffer: null, loading: true, loadPct: 0, _id: Math.random().toString(36).slice(2, 10) };
     playlist.push(t);
     renderPlaylist();
 
@@ -2400,6 +2716,7 @@ function importPlaylist(file) {
           buffer:   null,   // audio not loaded yet
           loading:  false,
           _plIdx:   null,
+          _id:      t._id  || Math.random().toString(36).slice(2, 10),
         });
       });
       renderPlaylist();
@@ -2423,12 +2740,20 @@ function loadPlaylistTrack(idx, deckId) {
   if (!t) return;
   const deck = decks[deckId];
   if (deck.playing) stopDeck(deckId);
-  deck.buffer   = t.buffer;
-  deck.duration = t.duration;
+  deck.buffer      = t.buffer;
+  deck.duration    = t.duration;
   deck.pauseOffset = 0;
-  deck._plIdx   = idx;          // remember playlist source for cue memory
+  deck._plIdx      = idx;   // remember playlist source for cue memory
+  deck.trackName   = t.name;
   document.getElementById('trackName' + deckId).textContent = t.name;
-  drawWaveform(t.buffer, deckId);
+  // Apply loaded state so load-area hides and waveform shows
+  if (t.buffer) {
+    document.getElementById('deck' + deckId).classList.add('loaded');
+    drawWaveform(t.buffer, deckId);
+  } else {
+    // Placeholder from JSON import — no audio yet; keep unloaded state
+    document.getElementById('deck' + deckId).classList.remove('loaded');
+  }
   // Restore saved cue points from playlist track, or clear them
   if (t.cues) {
     deck.cues = [...t.cues];
@@ -2440,9 +2765,11 @@ function loadPlaylistTrack(idx, deckId) {
     resetCues(deckId);
   }
   resetLoop(deckId);
-  setTimeout(() => showBPM(deckId, detectBPM(t.buffer)), 0);
-  showKey(deckId, null);
-  detectKey(t.buffer).then(k => showKey(deckId, k));
+  if (t.buffer) {
+    setTimeout(() => showBPM(deckId, detectBPM(t.buffer)), 0);
+    showKey(deckId, null);
+    detectKey(t.buffer).then(k => showKey(deckId, k));
+  }
 }
 
 function plItemDblClick(e, idx) {
@@ -2515,7 +2842,13 @@ function renderPlaylist() {
     }
     const isCurrent = autoDJActive && i === autoDJCurrentIdx;
     const isNext    = autoDJActive && i === autoDJCurrentIdx + 1;
+    const trackId   = t._id || '';
+    const votes     = trackId ? (upcomingVotes[trackId] || 0) : 0;
+    const isTopVoted = votes >= 3;
     let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '');
+    const voteBadge = (trackId && votes > 0)
+      ? `<span class="pl-votes show${isTopVoted ? ' top-voted' : ''}" onclick="prioritizeTrack('${trackId}',event)" title="${votes} viewer vote${votes>1?'s':''}. Click to play next.">👍${votes}</span>`
+      : `<span class="pl-votes" data-id="${trackId}"></span>`;
     return `<div class="${cls}" id="pl-item-${i}" draggable="true"
       ondblclick="plItemDblClick(event,${i})"
       ondragstart="plItemDragStart(event,${i})"
@@ -2526,6 +2859,7 @@ function renderPlaylist() {
       <span class="pl-handle" title="Drag to reorder">⠿⠿</span>
       <span class="pl-num">${isCurrent ? '▶' : i + 1}</span>
       <span class="pl-name" title="${esc(t.name)}">${esc(t.name)}</span>
+      ${voteBadge}
       <span class="pl-dur">${fmtTime(t.duration)}</span>
       <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'A')">→A</button>
       <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'B')">→B</button>

@@ -14,8 +14,8 @@ const helmet      = require('helmet');
 const authRoutes    = require('./src/auth');
 const adminRoutes   = require('./src/admin');
 const paymentRoutes = require('./src/payment');
-const { verifyToken, findUser } = require('./src/users');
-const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
+const { verifyToken, findUser, getSubscriptionStatus } = require('./src/users');
+const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getBroadcastMode, isManifestReady, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
 const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB, manualAddTrack, removeTrack: removeDBTrack } = require('./src/music-db');
 const { getWords: getFilterWords, addWord: addFilterWord, removeWord: removeFilterWord } = require('./src/wordfilter');
@@ -159,6 +159,10 @@ let isLive         = false;
 let coverUrl       = '';
 let nextTrackTitle = '';
 let nextTrackCover = '';
+// Upcoming playlist visible to viewers, with per-track vote counts
+let upcomingTracks = [];   // [{id, title}]
+const trackVotes   = new Map(); // trackId → vote count
+const userVotes    = new Map(); // userId (ip or username) → trackId they voted for
 
 // Viewer heartbeat map: username → timestamp
 const viewers = new Map();
@@ -199,34 +203,53 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// GET /api/me — always 200; avoids red 401 errors in browser devtools for unauthenticated users
+app.get('/api/me', (req, res) => {
+  const token = req.cookies.token || req.headers['x-token'];
+  if (!token) return res.json({ authenticated: false });
+  const payload = verifyToken(token);
+  if (!payload) return res.json({ authenticated: false });
+  const user = findUser(payload.username);
+  if (!user) return res.json({ authenticated: false });
+  const sub = getSubscriptionStatus(user);
+  res.json({ authenticated: true, username: user.username, subscription: sub });
+});
+
 // Tells the register page whether an invite code is required
 app.get('/api/invite-mode', (req, res) => {
   res.json({ inviteOnly: process.env.INVITE_ONLY === 'true' });
 });
 
-// No-auth live check — safe to expose (no stream key, no user data, no stream URL)
+// No-auth live check
 app.get('/api/live', (req, res) => {
   const sched = getSchedule();
   res.json({
-    live:        isLive || isBrowserLive(),
-    viewers:     viewers.size,
-    title:       getStreamTitle(),
-    coverUrl:    coverUrl || null,
-    nextTrack:   nextTrackTitle || null,
-    nextCover:   nextTrackCover || null,
-    scheduledAt: sched ? sched.scheduledAt : null,
+    live:          isLive || isBrowserLive(),
+    streamKey:     STREAM_KEY,
+    broadcastMode: getBroadcastMode(),
+    manifestReady: isManifestReady(),
+    viewers:       viewers.size,
+    title:         getStreamTitle(),
+    coverUrl:      coverUrl || null,
+    nextTrack:     nextTrackTitle || null,
+    nextCover:     nextTrackCover || null,
+    scheduledAt:   sched ? sched.scheduledAt : null,
+    upcoming:      upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 })),
   });
 });
 
 app.get('/api/status', requireAuth, (req, res) => {
   res.json({
-    live:      isLive || isBrowserLive(),
-    streamKey: STREAM_KEY,
-    title:     getStreamTitle(),
+    live:          isLive || isBrowserLive(),
+    streamKey:     STREAM_KEY,
+    broadcastMode: getBroadcastMode(),
+    manifestReady: isManifestReady(),
+    title:         getStreamTitle(),
     coverUrl,
-    viewers:   viewers.size,
-    nextTrack: nextTrackTitle || null,
-    nextCover: nextTrackCover || null,
+    viewers:       viewers.size,
+    nextTrack:     nextTrackTitle || null,
+    nextCover:     nextTrackCover || null,
+    upcoming:      upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 })),
   });
 });
 
@@ -243,8 +266,18 @@ const hlsGuestLimiter = rateLimit({
 });
 
 app.use('/live', hlsGuestLimiter, (req, res, next) => {
-  if (process.env.GUEST_WATCH !== 'true') return requireAuth(req, res, next);
-  next();
+  if (process.env.GUEST_WATCH === 'true') return next();
+  // For HLS/media requests never send an HTML redirect — return 401 JSON so
+  // HLS.js gets a clear error instead of trying to parse a login page as a manifest
+  const isMedia = req.path.endsWith('.m3u8') || req.path.endsWith('.ts');
+  if (isMedia) {
+    const token = req.cookies.token || req.headers['x-token'];
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const payload = verifyToken(token);
+    if (!payload) return res.status(401).json({ error: 'Invalid token' });
+    return next();
+  }
+  return requireAuth(req, res, next);
 }, (req, res, next) => {
   if (req.path.endsWith('.m3u8') || req.path.endsWith('.ts')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -353,8 +386,70 @@ app.post('/api/admin/title', requireAdmin, (req, res) => {
   nextTrackCover = '';
   broadcastAll({ type: 'next-track', title: null, cover: null });
   djAnnounce(`Now playing: ${title}`);
+  // Remove from upcoming list if title matches (case-insensitive)
+  const upIdx = upcomingTracks.findIndex(t => t.title.toLowerCase() === title.toLowerCase());
+  if (upIdx >= 0) { upcomingTracks.splice(upIdx, 1); broadcastUpcoming(); }
   res.json({ ok: true, title: getStreamTitle(), coverUrl });
 });
+
+// ─── Upcoming playlist ────────────────────────────────────────────────────────
+// GET /api/upcoming — public, no auth needed (safe for guests and unauthenticated viewers)
+app.get('/api/upcoming', (req, res) => {
+  const withVotes = upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 }));
+  res.json({ tracks: withVotes });
+});
+
+// POST /api/admin/upcoming — DJ publishes upcoming tracks list (up to 10 tracks)
+app.post('/api/admin/upcoming', requireAdmin, (req, res) => {
+  const { tracks } = req.body;
+  if (!Array.isArray(tracks)) return res.status(400).json({ error: 'tracks array required' });
+  const newList = tracks.slice(0, 10)
+    .map(t => ({ id: String(t.id || '').slice(0, 40), title: String(t.title || '').slice(0, 120) }))
+    .filter(t => t.id && t.title);
+  // Remove votes for tracks no longer in the list
+  const newIds = new Set(newList.map(t => t.id));
+  for (const [id] of trackVotes) { if (!newIds.has(id)) trackVotes.delete(id); }
+  for (const [u, id] of userVotes) { if (!newIds.has(id)) userVotes.delete(u); }
+  upcomingTracks = newList;
+  broadcastUpcoming();
+  res.json({ ok: true, count: newList.length });
+});
+
+// POST /api/admin/upcoming/prioritize — move a voted track to top of list
+app.post('/api/admin/upcoming/prioritize', requireAdmin, (req, res) => {
+  const { trackId } = req.body;
+  const idx = upcomingTracks.findIndex(t => t.id === trackId);
+  if (idx < 0) return res.status(404).json({ error: 'not found' });
+  const [track] = upcomingTracks.splice(idx, 1);
+  upcomingTracks.unshift(track);
+  broadcastUpcoming();
+  res.json({ ok: true });
+});
+
+// POST /api/upcoming/vote — viewer votes on an upcoming track (auth required, toggle on/off)
+const voteLimiter = rateLimit({ windowMs: 10_000, max: 10, standardHeaders: true, legacyHeaders: false });
+app.post('/api/upcoming/vote', voteLimiter, requireAuth, (req, res) => {
+  const { trackId } = req.body;
+  if (!trackId) return res.status(400).json({ error: 'trackId required' });
+  if (!upcomingTracks.find(t => t.id === trackId)) return res.status(404).json({ error: 'not in upcoming list' });
+  const user = req.user.username;
+  const prev = userVotes.get(user);
+  if (prev === trackId) {
+    userVotes.delete(user);
+    trackVotes.set(trackId, Math.max(0, (trackVotes.get(trackId) || 0) - 1));
+  } else {
+    if (prev) trackVotes.set(prev, Math.max(0, (trackVotes.get(prev) || 0) - 1));
+    userVotes.set(user, trackId);
+    trackVotes.set(trackId, (trackVotes.get(trackId) || 0) + 1);
+  }
+  broadcastUpcoming();
+  res.json({ ok: true, yourVote: userVotes.get(user) || null });
+});
+
+function broadcastUpcoming() {
+  const withVotes = upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 }));
+  broadcastAll({ type: 'upcoming-update', tracks: withVotes });
+}
 
 // DJ announces the upcoming track to viewers
 app.post('/api/admin/next-track', requireAdmin, (req, res) => {

@@ -7,6 +7,7 @@ let ffmpegProc    = null;
 let djSocket      = null;
 let streamTitle   = 'DJ Live Session';
 let browserIsLive = false;
+let broadcastMode = 'video';     // 'video' | 'audio'
 let currentRecordingFile = null;
 let sessionStartTime     = null;
 let setlist              = [];   // [{ title, time }] — current session only
@@ -33,6 +34,13 @@ function saveSessionToHistory(start, tracks) {
 
 function getSessionHistory() { return loadSessionHistory(); }
 
+function getBroadcastMode()    { return broadcastMode; }
+function isManifestReady() {
+  if (!browserIsLive) return false;
+  const streamKey = process.env.STREAM_KEY || 'djlive';
+  const hlsDir    = path.join(__dirname, '../media/live', streamKey);
+  try { return fs.existsSync(path.join(hlsDir, 'index.m3u8')); } catch { return false; }
+}
 function getStreamTitle()      { return streamTitle; }
 function setStreamTitle(t) {
   streamTitle = String(t).slice(0, 120);
@@ -57,15 +65,26 @@ function setupStreamWS(wss) {
     }
 
     if (djSocket) {
-      ws.send(JSON.stringify({ type: 'error', msg: 'Another DJ is already live' }));
-      ws.close(4002, 'Already broadcasting');
-      return;
+      // readyState: 0=CONNECTING 1=OPEN 2=CLOSING 3=CLOSED
+      if (djSocket.readyState <= 1) {
+        // Genuinely live — reject
+        ws.send(JSON.stringify({ type: 'error', msg: 'Another DJ is already live' }));
+        ws.close(4002, 'Already broadcasting');
+        return;
+      }
+      // Stale / closing socket from a previous session — clean it up and allow reconnect
+      console.log('[DJ] Clearing stale djSocket (readyState=%d)', djSocket.readyState);
+      stopFFmpeg();
+      djSocket = null;
     }
 
-    djSocket = ws;
-    console.log('[DJ] Browser stream connected (mode: video)');
+    const mode = url.searchParams.get('mode') || 'video';
+    broadcastMode = (mode === 'audio') ? 'audio' : 'video';
 
-    startFFmpeg();
+    djSocket = ws;
+    console.log('[DJ] Browser stream connected (mode: %s)', broadcastMode);
+
+    startFFmpeg(broadcastMode);
 
     ws.on('message', (chunk) => {
       if (!ffmpegProc || !ffmpegProc.stdin.writable) return;
@@ -94,7 +113,7 @@ function setupStreamWS(wss) {
   });
 }
 
-function startFFmpeg() {
+function startFFmpeg(mode = 'video') {
   const streamKey = process.env.STREAM_KEY || 'djlive';
   const ffmpeg    = process.env.FFMPEG_PATH || 'ffmpeg';
   const hlsDir    = path.join(__dirname, '../media/live', streamKey);
@@ -113,59 +132,116 @@ function startFFmpeg() {
   const hlsIndex   = path.join(hlsDir, 'index.m3u8').replace(/\\/g, '/');
   const hlsSegment = path.join(hlsDir, 'seg%03d.ts').replace(/\\/g, '/');
 
-  // Recording filename: session_2026-03-24_1730.webm
+  // Recording filename: session_2026-03-24_1730.mkv
   const now   = new Date();
   const stamp = now.getFullYear() + '-' +
     String(now.getMonth()+1).padStart(2,'0') + '-' +
     String(now.getDate()).padStart(2,'0') + '_' +
     String(now.getHours()).padStart(2,'0') +
     String(now.getMinutes()).padStart(2,'0');
-  const recFile = path.join(recDir, `session_${stamp}.webm`).replace(/\\/g, '/');
+  const recFile = path.join(recDir, `session_${stamp}.mkv`).replace(/\\/g, '/');
 
   currentRecordingFile = recFile;
   sessionStartTime     = now.toISOString();
   setlist              = [];   // fresh setlist each session
 
-  const args = [
-    '-loglevel', 'warning',
-    '-fflags', '+genpts+discardcorrupt',
-    '-err_detect', 'ignore_err',
-    '-f', 'webm',
-    '-i', 'pipe:0',
-    // Video — force keyframe every 2s so HLS segments always start cleanly
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k',
-    '-g', '50', '-sc_threshold', '0',
-    '-force_key_frames', 'expr:gte(t,n_forced*2)',
-    // Audio
-    '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k',
-    // HLS output
+  const hlsCommon = [
     '-f', 'hls',
     '-hls_time', '2',
-    '-hls_list_size', '12',
+    '-hls_list_size', '30',          // keep 60s of segments so late-joiners don't miss them
     '-hls_flags', 'delete_segments+split_by_time',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', hlsSegment,
     hlsIndex,
-    // Recording output — copy encoded stream to webm file
-    '-c', 'copy',
-    '-f', 'webm',
-    recFile
   ];
+
+  let args;
+  if (mode === 'audio') {
+    args = [
+      '-loglevel', 'warning',
+      '-fflags', '+genpts+discardcorrupt',
+      '-err_detect', 'ignore_err',
+      '-f', 'webm',
+      '-i', 'pipe:0',
+      '-vn',
+      '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k',
+      ...hlsCommon,
+      '-vn', '-c:a', 'copy',
+      '-f', 'matroska',
+      recFile,
+    ];
+  } else {
+    args = [
+      '-loglevel', 'warning',
+      '-fflags', '+genpts+discardcorrupt',
+      '-err_detect', 'ignore_err',
+      '-f', 'webm',
+      '-i', 'pipe:0',
+      // Video — NVIDIA GPU encoder (h264_nvenc). Falls back to libx264 if NVENC unavailable.
+      '-c:v', 'h264_nvenc',
+      '-preset', 'll',       // low-latency preset (supported on GTX+)
+      '-rc', 'cbr',          // constant bitrate — stable for live streaming
+      '-bf', '0',            // no B-frames (required for HLS segment independence)
+      '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k',
+      '-g', '50',            // keyframe every 2s at 25fps
+      // Audio
+      '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k',
+      ...hlsCommon,
+      // Recording output — copy already-encoded H264/AAC into MKV
+      '-c', 'copy',
+      '-f', 'matroska',
+      recFile,
+    ];
+  }
 
   ffmpegProc = spawn(ffmpeg, args);
   browserIsLive = true;
   console.log('[REC] Recording to:', recFile);
 
+  let stderrBuf = '';
   ffmpegProc.stderr.on('data', (d) => {
     const line = d.toString().trim();
-    if (line) console.log('[FFmpeg]', line.slice(0, 200));
+    if (line) { console.log('[FFmpeg]', line.slice(0, 200)); stderrBuf += line + '\n'; }
   });
 
   ffmpegProc.on('close', (code) => {
     console.log(`[FFmpeg] exited (code ${code})`);
-    ffmpegProc = null;
+    const wasLive    = browserIsLive;
+    const savedStderr = stderrBuf;
+    ffmpegProc    = null;
     browserIsLive = false;
+    stderrBuf     = '';
+
+    // NVENC not available — retry with software encoder (video mode only)
+    if (code !== 0 && wasLive && mode === 'video' && savedStderr.includes('nvenc') && djSocket && djSocket.readyState === 1) {
+      console.log('[DJ] NVENC unavailable — retrying with libx264 software encoder');
+      // Replace NVENC args with libx264
+      const swArgs = args.map((a, i) => {
+        if (a === 'h264_nvenc') return 'libx264';
+        if (a === 'll' && args[i-1] === '-preset') return 'ultrafast';
+        if (a === 'cbr' && args[i-1] === '-rc') return null;
+        if (a === '-rc') return null;
+        if (a === '0' && args[i-1] === '-bf') return null;
+        if (a === '-bf') return null;
+        return a;
+      }).filter(a => a !== null);
+      // Add libx264-specific flags
+      const g50idx = swArgs.indexOf('-g');
+      if (g50idx > -1) swArgs.splice(g50idx, 0, '-tune', 'zerolatency', '-sc_threshold', '0');
+      ffmpegProc = spawn(ffmpeg, swArgs);
+      browserIsLive = true;
+      ffmpegProc.stderr.on('data', (d) => { const l = d.toString().trim(); if (l) console.log('[FFmpeg-sw]', l.slice(0,200)); });
+      ffmpegProc.on('close', (c) => { ffmpegProc = null; browserIsLive = false; console.log(`[FFmpeg-sw] exited (code ${c})`); });
+      ffmpegProc.stdin.on('error', () => {});
+      return;
+    }
+
+    // Unexpected crash while DJ is still connected — tell the client so the button resets
+    if (code !== 0 && wasLive && djSocket && djSocket.readyState === 1 /*OPEN*/) {
+      try { djSocket.send(JSON.stringify({ type: 'error', msg: `Stream encoder crashed (exit ${code}) — check server logs` })); } catch (_) {}
+      try { djSocket.close(1011, 'Encoder failure'); } catch (_) {}
+      djSocket = null;
+    }
   });
 
   ffmpegProc.stdin.on('error', () => {});
@@ -199,7 +275,7 @@ function stopFFmpegOnExit() { stopFFmpeg(); }
 
 module.exports = {
   setupStreamWS, getStreamTitle, setStreamTitle,
-  isDJConnected, isBrowserLive,
+  isDJConnected, isBrowserLive, getBroadcastMode, isManifestReady,
   getCurrentRecording, getSessionStartTime,
   getSetlist, clearSetlist, stopFFmpegOnExit,
   getSessionHistory,

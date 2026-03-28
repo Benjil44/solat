@@ -170,6 +170,11 @@
     #live-badge { position:absolute; top:12px; left:12px; background:var(--accent); color:#fff;
       font-size:.75em; font-weight:bold; padding:3px 9px; border-radius:4px; letter-spacing:1px;
       z-index:6; display:none; }
+    #unmute-hint { position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,.75); color:#fff; font-size:.85em; padding:7px 16px;
+      border-radius:20px; cursor:pointer; z-index:7; display:none;
+      border:1px solid rgba(255,255,255,.2); white-space:nowrap; }
+    #unmute-hint:hover { background:rgba(255,80,0,.85); }
 
     /* ── Buffer progress bar (top of screen while loading) ── */
     #buf-bar { position:fixed; top:0; left:0; height:3px; width:0%;
@@ -302,6 +307,20 @@
     .trend-score { font-size:.72em; color:var(--accent); font-weight:bold; white-space:nowrap; }
     .trend-empty { padding:20px; text-align:center; color:#444; font-size:.82em; }
 
+    /* Upcoming pane */
+    #upcoming-list { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
+    .upcoming-empty { padding:20px; text-align:center; color:#444; font-size:.82em; }
+    .up-item { display:flex; align-items:center; gap:8px; padding:7px 10px;
+      background:#0d0d0d; border:1px solid #1a1a1a; border-radius:7px; }
+    .up-num { font-size:.7em; color:#555; min-width:18px; text-align:right; font-weight:bold; flex-shrink:0; }
+    .up-title { flex:1; font-size:.8em; color:#ddd; word-break:break-word; line-height:1.3; }
+    .up-vote-btn { display:flex; align-items:center; gap:3px; padding:3px 9px;
+      border:1px solid #333; border-radius:12px; background:transparent;
+      color:#666; cursor:pointer; font-size:.75em; font-weight:bold; transition:.15s; flex-shrink:0; }
+    .up-vote-btn:hover { border-color:#ff9944; color:#ff9944; background:#1a0800; }
+    .up-vote-btn.voted { border-color:var(--accent); color:var(--accent); background:#1a0800; }
+    .up-votes-count { font-size:.8em; }
+
     /* ── Trial expiry banner ── */
     #expiry-banner {
       background: linear-gradient(90deg,#2a1400,#1a0d00);
@@ -407,6 +426,7 @@
     <div id="video-side">
       <div id="video-wrap">
         <span id="live-badge">LIVE</span>
+        <div id="unmute-hint" onclick="manualUnmute()">🔇 Click to unmute</div>
         <!-- audio-only video element (invisible) -->
         <video id="player" autoplay playsinline muted></video>
 
@@ -459,6 +479,9 @@
           🎵 Requests<span class="tab-notif" id="req-notif"></span>
         </button>
         <button class="panel-tab"        id="tab-btn-trending" onclick="switchTab('trending')">🔥 Top</button>
+        <button class="panel-tab"        id="tab-btn-upcoming" onclick="switchTab('upcoming')">
+          📋 Up Next<span class="tab-notif" id="upcoming-notif"></span>
+        </button>
       </div>
 
       <!-- Chat pane -->
@@ -499,6 +522,11 @@
       <div class="tab-pane" id="pane-trending">
         <div id="trending-list"><div class="trend-empty">Loading top tracks…</div></div>
       </div>
+
+      <!-- Upcoming tab -->
+      <div class="tab-pane" id="pane-upcoming">
+        <div id="upcoming-list"><div class="upcoming-empty">No upcoming tracks shared yet</div></div>
+      </div>
     </div>
 
   </div>
@@ -509,15 +537,19 @@
     const liveBadge = document.getElementById('live-badge');
     const bufBar    = document.getElementById('buf-bar');
     let hls = null, pollTimer = null, heartbeatTimer = null, countdownInterval = null;
-    let isPlaying = false, chatOpen = false, wsChat = null;
+    let isPlaying = false, isConnecting = false, chatOpen = false, wsChat = null;
     let hlsErrCount = 0;
+    let userHasUnmuted = false;  // true after the user explicitly unmutes — survives HLS restarts
     let userToken   = null;
     let _scheduledAt = null; // upcoming go-live time from server
-    let videoMode   = true;  // true = show video feed, false = show artwork
+    let videoMode      = true;   // true = show video feed, false = show artwork
+    let broadcastMode  = 'video'; // 'video' | 'audio' — set by DJ, received via pollStatus
     let currentUsername = null;
     let isGuestMode = false;
     let activeTab   = 'chat';
     let _requests   = [];
+    let _upcomingTracks = [];   // [{id, title, votes}]
+    let _myUpvote       = null; // trackId the current user has voted for
 
     // ── Volume persistence ────────────────────────────────────
     const savedVol = parseFloat(localStorage.getItem('djVol') ?? '0.8');
@@ -527,8 +559,9 @@
 
     // ── Init ─────────────────────────────────────────────────
     async function init() {
-      const res  = await fetch('/auth/me');
-      const isGuest = !res.ok || new URLSearchParams(location.search).has('guest');
+      const res  = await fetch('/api/me');
+      const data0 = res.ok ? await res.json() : {};
+      const isGuest = !data0.authenticated || new URLSearchParams(location.search).has('guest');
       if (isGuest) {
         // Guest / unauthenticated mode — read-only
         isGuestMode = true;
@@ -536,9 +569,10 @@
         pollStatus();
         connectChat();
         loadInitialRequests();
+        loadUpcoming();
         return;
       }
-      const data = await res.json();
+      const data = data0;
 
       currentUsername = data.username;
       document.getElementById('username-display').textContent = data.username;
@@ -594,6 +628,7 @@
       heartbeatTimer = setInterval(() => fetch('/api/heartbeat', { method:'POST' }).catch(()=>{}), 15000);
       connectChat();
       loadInitialRequests();
+      loadUpcoming();
       initPushNotifications();
     }
 
@@ -737,6 +772,10 @@
 
         if (d.title) setNowPlaying(d.title, d.coverUrl || '');
         updateNextTrack(d.nextTrack || null);
+        // Load upcoming playlist from initial poll (WS will keep it updated after that)
+        if (d.upcoming) setUpcomingTracks(d.upcoming);
+        // Update broadcast mode (audio-only vs video)
+        if (d.broadcastMode) broadcastMode = d.broadcastMode;
         // viewer badge
         const vb = document.getElementById('viewer-badge');
         if (d.live && d.viewers > 0) {
@@ -747,8 +786,13 @@
         }
         document.getElementById('cover-wrap').classList.toggle('live', !!d.live);
 
-        if (d.live && !isPlaying) {
+        if (d.live && d.manifestReady && !isPlaying && !isConnecting) {
           startStream(d.streamKey);
+        } else if (d.live && !d.manifestReady && !isPlaying && !isConnecting) {
+          // Manifest not ready yet (FFmpeg still starting) — poll again in 2s silently
+          clearTimeout(pollTimer);
+          pollTimer = setTimeout(pollStatus, 2000);
+          return;
         } else if (!d.live && isPlaying) {
           stopStream();
         } else if (!d.live) {
@@ -776,6 +820,7 @@
 
     // ── HLS playback ──────────────────────────────────────────
     function startStream(streamKey) {
+      isConnecting = true;
       const url = '/live/live/' + streamKey + '/index.m3u8';
 
       // Show connecting state — don't hide overlay until manifest confirmed
@@ -819,25 +864,34 @@
         hls.loadSource(url);
         hls.attachMedia(video);
 
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
           manifestLoaded = true;
           isPlaying = true;
+          isConnecting = false;
           hlsErrCount = 0;
           finishBufBar();
+          // Detect audio-only stream via HLS.js flag or server-reported mode
+          const isAudioOnly = broadcastMode === 'audio' || data?.video === false;
+          if (isAudioOnly) {
+            videoMode = false;
+            document.getElementById('view-toggle-btn').classList.remove('show');
+          }
           hideOverlay();
           liveBadge.style.display = 'block';
-          video.volume = 0;
-          video.muted  = true;
-          const targetVol = parseFloat(document.getElementById('volume').value);
-          video.play().then(() => {
-            video.muted = false;
-            let v = 0;
-            const fadeIn = setInterval(() => {
-              v = Math.min(v + 0.05, targetVol);
-              video.volume = v;
-              if (v >= targetVol) clearInterval(fadeIn);
-            }, 60);
-          }).catch(showPlayPrompt);
+          if (!userHasUnmuted) {
+            // First play: start muted so autoplay policy is satisfied, then show unmute hint
+            video.volume = 0;
+            video.muted  = true;
+            video.play().then(() => {
+              document.getElementById('unmute-hint').style.display = 'block';
+            }).catch(showPlayPrompt);
+          } else {
+            // User already unmuted — restore volume and play unmuted (no hint needed)
+            const savedV = parseFloat(document.getElementById('volume').value) || 0.8;
+            video.volume = savedV;
+            video.muted  = false;
+            video.play().catch(showPlayPrompt);
+          }
         });
 
         // Reset error counter every time a fragment loads successfully
@@ -865,13 +919,31 @@
 
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             if (!manifestLoaded) {
-              // Manifest still 404 — destroy and let poll call startStream again in 3s
-              const delay = Math.min(500 * hlsErrCount, 3000);
-              setTimeout(() => { if (hls) { hls.destroy(); hls = null; } isPlaying = false; }, delay);
+              // Manifest 404 — destroy HLS and retry quickly
+              const delay = Math.min(500 * hlsErrCount, 2000);
+              setTimeout(() => {
+                if (hls) { hls.destroy(); hls = null; }
+                isPlaying = false; isConnecting = false;
+                // Clear stale badges so they reflect real state
+                liveBadge.style.display = 'none';
+                const hb = document.getElementById('health-badge');
+                if (hb) hb.className = '';
+                // Reschedule poll in 3s instead of waiting the 8s timer
+                clearTimeout(pollTimer);
+                pollTimer = setTimeout(pollStatus, 3000);
+              }, delay);
             } else {
-              // Segment temporarily unavailable (live edge, network hiccup) — wait & retry
-              const delay = Math.min(500 * hlsErrCount, 4000);
-              setTimeout(() => { if (hls) hls.startLoad(); }, delay);
+              // Segment 404 — could be a live-edge race (FFmpeg still writing) or
+              // a deleted segment (viewer fell behind). Destroy HLS and go back to
+              // pollStatus() so we wait for a stable manifest before reconnecting.
+              // This prevents the tight destroy→startStream→404 loop.
+              const delay = Math.min(1000 * hlsErrCount, 5000);
+              setTimeout(() => {
+                if (hls) { hls.destroy(); hls = null; }
+                isPlaying = false; isConnecting = false;
+                clearTimeout(pollTimer);
+                pollTimer = setTimeout(pollStatus, 2000);
+              }, delay);
             }
 
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -904,6 +976,7 @@
       if (hls) { hls.destroy(); hls = null; }
       video.src = '';
       isPlaying = false;
+      isConnecting = false;
       liveBadge.style.display = 'none';
       const hb = document.getElementById('health-badge');
       if (hb) hb.className = '';
@@ -918,6 +991,9 @@
       if (vc) vc.style.display = 'none';
       if (_vizFrame) { cancelAnimationFrame(_vizFrame); _vizFrame = null; }
       _vizInit = false; // allow re-init on next connect
+      // Hide unmute hint
+      document.getElementById('unmute-hint').style.display = 'none';
+      userHasUnmuted = false;  // reset for next stream session
       // Reset to artwork view and hide the toggle
       video.classList.remove('visible');
       document.getElementById('now-playing').classList.remove('hidden');
@@ -1005,8 +1081,14 @@
     function hideOverlay() {
       clearInterval(countdownInterval);
       overlay.style.display = 'none';
+      // Audio-only mode: force artwork/vinyl view, hide video toggle
+      if (broadcastMode === 'audio') {
+        videoMode = false;
+      }
       applyViewMode();
-      document.getElementById('view-toggle-btn').classList.add('show');
+      if (broadcastMode !== 'audio') {
+        document.getElementById('view-toggle-btn').classList.add('show');
+      }
       // Show PiP button if browser supports it
       if (document.pictureInPictureEnabled) {
         document.getElementById('pip-btn').style.display = 'inline-block';
@@ -1081,12 +1163,37 @@
       applyViewMode();
     }
 
-    function manualPlay() { video.muted = false; video.play(); hideOverlay(); }
+    function manualPlay() {
+      video.muted = false;
+      video.play();
+      document.getElementById('unmute-hint').style.display = 'none';
+      hideOverlay();
+    }
+
+    function manualUnmute() {
+      userHasUnmuted = true;
+      document.getElementById('unmute-hint').style.display = 'none';
+      video.muted = false;
+      let targetVol = parseFloat(document.getElementById('volume').value);
+      if (!(targetVol > 0)) {
+        // Slider is at 0 — bump to a reasonable default so the user can actually hear
+        targetVol = 0.7;
+        document.getElementById('volume').value = targetVol;
+        localStorage.setItem('djVol', targetVol);
+      }
+      let v = 0;
+      const fadeIn = setInterval(() => {
+        v = Math.min(v + 0.05, targetVol);
+        video.volume = v;
+        if (v >= targetVol) clearInterval(fadeIn);
+      }, 60);
+    }
 
     // ── Controls ──────────────────────────────────────────────
     function setVolume(v) {
-      video.volume = parseFloat(v);
+      document.getElementById('unmute-hint').style.display = 'none';
       video.muted  = false;
+      video.volume = parseFloat(v);
       localStorage.setItem('djVol', v);
     }
 
@@ -1193,6 +1300,7 @@
             return;
           }
           if (msg.type === 'next-track') { updateNextTrack(msg.title); return; }
+          if (msg.type === 'upcoming-update') { setUpcomingTracks(msg.tracks); return; }
           if (msg.type === 'reaction') { spawnReactionEmoji(msg.emoji); return; }
           if (msg.type === 'msg-deleted') {
             const el = document.querySelector(`.chat-msg[data-msg-id="${CSS.escape(msg.msgId)}"]`);
@@ -1289,7 +1397,7 @@
     // ── Tab switching ────────────────────────────────────────────────────────
     function switchTab(tab) {
       activeTab = tab;
-      ['chat','requests','trending'].forEach(t => {
+      ['chat','requests','trending','upcoming'].forEach(t => {
         document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
         document.getElementById('pane-' + t).classList.toggle('active', t === tab);
       });
@@ -1298,6 +1406,11 @@
         renderRequests(_requests);
       }
       if (tab === 'trending') loadTrending();
+      if (tab === 'upcoming') {
+        document.getElementById('upcoming-notif').classList.remove('show');
+        renderUpcoming(_upcomingTracks);
+        loadUpcoming(); // refresh vote counts when tab is opened
+      }
     }
 
     // ── Requests ─────────────────────────────────────────────────────────────
@@ -1452,6 +1565,61 @@
     function hideSuggestions() {
       const el = document.getElementById('req-suggestions');
       if (el) el.style.display = 'none';
+    }
+
+    // ── Upcoming playlist ─────────────────────────────────────────────────────
+    function renderUpcoming(tracks) {
+      const el = document.getElementById('upcoming-list');
+      if (!tracks || !tracks.length) {
+        el.innerHTML = '<div class="upcoming-empty">No upcoming tracks shared yet</div>';
+        return;
+      }
+      el.innerHTML = tracks.map((t, i) => {
+        const voted = _myUpvote === t.id;
+        const canVote = !!currentUsername && !isGuestMode;
+        return `<div class="up-item">
+          <span class="up-num">${i + 1}</span>
+          <span class="up-title">${esc(t.title)}</span>
+          ${canVote
+            ? `<button class="up-vote-btn${voted ? ' voted' : ''}" onclick="voteUpcoming('${esc(t.id)}')" title="${voted ? 'Remove vote' : 'Vote for this track'}">
+                👍 <span class="up-votes-count">${t.votes || 0}</span>
+               </button>`
+            : `<span style="font-size:.72em;color:#444">${t.votes ? t.votes + ' 👍' : ''}</span>`
+          }
+        </div>`;
+      }).join('');
+    }
+
+    function setUpcomingTracks(tracks) {
+      _upcomingTracks = tracks || [];
+      const notif = document.getElementById('upcoming-notif');
+      if (_upcomingTracks.length > 0 && activeTab !== 'upcoming') notif.classList.add('show');
+      renderUpcoming(_upcomingTracks); // always render so pane is ready when tab is opened
+    }
+
+    async function loadUpcoming() {
+      try {
+        const res = await fetch('/api/upcoming');
+        if (!res.ok) return;
+        const d = await res.json();
+        setUpcomingTracks(d.tracks);
+      } catch {}
+    }
+
+    async function voteUpcoming(trackId) {
+      if (!currentUsername || isGuestMode) return;
+      try {
+        const res = await fetch('/api/upcoming/vote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackId }),
+        });
+        if (!res.ok) return;
+        const d = await res.json();
+        _myUpvote = d.yourVote || null;
+        // Optimistically re-render (server will push update via WS shortly)
+        renderUpcoming(_upcomingTracks);
+      } catch {}
     }
 
     // ── Trending ─────────────────────────────────────────────────────────────
