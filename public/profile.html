@@ -94,6 +94,33 @@
       border:2px solid transparent;transition:.12s;line-height:1}
     .avatar-opt:hover{border-color:#444}
     .avatar-opt.selected{border-color:var(--accent);background:#1a0800}
+
+    /* ── Responsive ── */
+    @media(max-width:640px){
+      .wrap{margin:16px auto}
+      .profile-card{padding:20px 16px;gap:16px}
+      .profile-username{font-size:1.25em}
+      .mini-stat{min-width:60px;padding:8px 10px}
+      .mini-stat .mval{font-size:1.3em}
+      .req-card,.action-card{padding:16px 18px}
+      .avatar-picker{gap:6px}
+      .avatar-opt{font-size:1.4em}
+    }
+    @media(max-width:480px){
+      .profile-card{flex-direction:column;text-align:center;padding:18px}
+      .profile-info{display:flex;flex-direction:column;align-items:center}
+      .req-date{display:none}
+      .stats-row{gap:6px}
+      .mini-stat{min-width:54px}
+    }
+    @media(max-width:380px){
+      .topbar{padding:10px 12px;gap:8px}
+      .topbar-logo{font-size:.95em;letter-spacing:1px}
+      .topbar-back,.topbar-logout{padding:5px 10px;font-size:.75em}
+      .profile-username{font-size:1.1em}
+      .mini-stat .mval{font-size:1.1em}
+      .req-votes{display:none}
+    }
   </style>
 </head>
 <body>

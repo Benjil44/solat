@@ -140,7 +140,11 @@
     #overlay-title { font-size:1.35em; font-weight:bold; color:#fff; margin:0; }
     #overlay-sub   { color:#666; font-size:.85em; text-align:center;
       max-width:280px; line-height:1.6; margin:0; }
-    #overlay-countdown { font-size:.75em; color:#444; letter-spacing:1px; margin-top:-10px; }
+    #overlay-countdown { font-size:.75em; color:#555; letter-spacing:1px; margin-top:-10px; }
+    #overlay-sched-box { background:rgba(255,136,68,.08); border:1px solid rgba(255,136,68,.25);
+      border-radius:10px; padding:10px 18px; text-align:center; margin-top:-6px; }
+    #overlay-sched-time { color:#ff8844; font-size:.92em; font-weight:bold; }
+    #overlay-sched-cd   { color:#ffaa77; font-size:1.5em; font-weight:900; letter-spacing:2px; margin-top:4px; }
 
     /* Spinning vinyl disc for loading states */
     .vinyl { width:96px; height:96px; border-radius:50%;
@@ -1130,13 +1134,13 @@
 
       const hasSchedule = _scheduledAt && new Date(_scheduledAt).getTime() > Date.now() - 60000;
       const schedStr = hasSchedule ? (() => {
-        const dt       = new Date(_scheduledAt);
-        const timeStr  = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const dateStr  = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-        const tzAbbr   = dt.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
-        return `<div id="overlay-sched" style="color:#ff8844;font-size:.88em;margin-top:-6px">
-          🗓 Going live ${dateStr} at <strong>${timeStr} ${tzAbbr}</strong>
-          — <span id="sched-cd">${fmtCountdown(dt - Date.now())}</span>
+        const dt      = new Date(_scheduledAt);
+        const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        const tzAbbr  = dt.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+        return `<div id="overlay-sched-box">
+          <div id="overlay-sched-time">🗓 ${dateStr} &nbsp;·&nbsp; ${timeStr} ${tzAbbr}</div>
+          <div id="overlay-sched-cd">${fmtCountdown(dt - Date.now())}</div>
         </div>`;
       })() : '';
 
@@ -1144,7 +1148,7 @@
         <div class="vinyl slow"></div>
         <div id="overlay-title">DJ Offline</div>
         ${schedStr}
-        <div id="overlay-sub">We'll connect you automatically when the DJ goes live.</div>
+        <div id="overlay-sub">${hasSchedule ? 'See you then!' : 'We\'ll connect you automatically when the DJ goes live.'}</div>
         <div id="overlay-countdown">Checking soon…</div>`;
 
       let secs = isPlaying ? 8 : 3;
@@ -1152,7 +1156,7 @@
         const el = document.getElementById('overlay-countdown');
         if (!el) { clearInterval(countdownInterval); return; }
         // Update schedule countdown if present
-        const cd = document.getElementById('sched-cd');
+        const cd = document.getElementById('overlay-sched-cd');
         if (cd && _scheduledAt) cd.textContent = fmtCountdown(new Date(_scheduledAt) - Date.now());
         el.textContent = secs > 0 ? `Checking in ${secs}s` : 'Checking…';
         if (--secs < 0) secs = isPlaying ? 7 : 2;
