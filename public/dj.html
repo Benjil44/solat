@@ -453,7 +453,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .samplepad-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
   text-transform:uppercase}
 .samplepad-body{display:none;margin-top:12px;
-  display:none;grid-template-columns:repeat(4,1fr);gap:8px}
+  grid-template-columns:repeat(8,1fr);gap:8px}
 .samplepad-body.open{display:grid}
 .pad{background:#111;border:2px solid #252525;border-radius:8px;padding:8px 6px;
   text-align:center;cursor:pointer;position:relative;transition:background .08s,border-color .08s;
@@ -571,6 +571,19 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .center-col{
     grid-column:1/-1;grid-row:1
   }
+  /* Cap viz canvas height so it doesn't fill the full viewport width */
+  #viz-canvas,#cam-preview{max-height:200px;object-fit:cover}
+  /* Constrain crossfader card width and center it */
+  .crossfader-card{max-width:600px;margin:0 auto;width:100%}
+}
+
+/* Very small phones ≤420px */
+@media(max-width:420px){
+  header h1{font-size:.8em;letter-spacing:0}
+  .hdr-right{gap:7px}
+  /* Show only icon for Admin button */
+  .hdr-btn.admin-btn{font-size:0;padding:5px 8px}
+  .hdr-btn.admin-btn::before{content:'⚙';font-size:14px}
 }
 
 /* Narrow tablet / large phone ≤800px */
@@ -583,6 +596,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   /* Playlist header: tighten gaps so buttons don't overflow */
   .pl-header{gap:6px}
   .pl-add-btn{padding:4px 9px;font-size:.77em}
+  /* Cam buttons: 2×2 grid */
+  .cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 }
 
 /* Mobile ≤640px: single column stack */
@@ -652,8 +667,20 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .setlist-card{margin:0 8px 8px;padding:10px}
   #setlist-items{max-height:120px}
 
-  /* Chat drawer */
-  .dj-chat-drawer.open{width:260px}
+  /* Queue panel */
+  .queue-hdr>span:last-child{display:none} /* hide helper text */
+  .qb-up,.qb-dn{display:none}             /* hide reorder arrows (drag still works) */
+
+  /* Sample pads: 4 columns on mobile */
+  .samplepad-body{grid-template-columns:repeat(4,1fr)}
+
+  /* Chat drawer — full overlay on mobile so it doesn't crush main content */
+  .dj-chat-drawer{position:fixed;right:0;top:0;height:100%;z-index:300;border-left-width:0!important}
+  .dj-chat-drawer.open{width:85%;max-width:300px;border-left-width:2px!important;
+    box-shadow:-6px 0 24px rgba(0,0,0,.7)}
+  /* Dim backdrop when chat is open */
+  .dj-chat-drawer.open::before{content:'';position:fixed;inset:0;right:auto;
+    width:calc(100vw - min(85vw,300px));background:rgba(0,0,0,.55);z-index:-1;pointer-events:none}
 }
 </style>
 </head>
@@ -674,7 +701,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="vp-peak" id="vp-peak"></div>
     </div>
     <button class="hdr-btn" id="chatToggleBtn" onclick="toggleDJChat()">💬 Chat<span class="chat-badge" id="chat-badge" style="display:none">0</span></button>
-    <button class="hdr-btn" onclick="window.location.href='/admin.html'">Admin</button>
+    <button class="hdr-btn admin-btn" onclick="window.location.href='/admin.html'">Admin</button>
   </div>
 </header>
 

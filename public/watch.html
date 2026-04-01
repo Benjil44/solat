@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ff4500">
   <link rel="manifest" href="/manifest.json">
   <title>DJ Live Stream</title>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script src="/hls.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -245,10 +245,16 @@
     .req-send-btn:hover { background:#2a1000; }
     #req-list { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:5px; }
     .req-card { background:#0d0d0d; border:1px solid #1e1e1e; border-radius:8px; padding:8px 10px;
-      display:flex; gap:8px; align-items:flex-start; }
+      display:flex; gap:8px; align-items:flex-start; cursor:default; transition:opacity .15s; }
     .req-card.accepted { border-color:#44aa66; }
     .req-card.played   { opacity:.45; }
     .req-card.rejected { opacity:.35; }
+    .req-card.dragging { opacity:.35; }
+    .req-card.drag-over { border-color:#ff4400; background:#1a0800; }
+    .req-drag-handle { color:#2a2a2a; font-size:1em; cursor:grab; flex-shrink:0;
+      padding:0 2px; line-height:1; user-select:none; align-self:center; }
+    .req-drag-handle:hover { color:#666; }
+    .req-drag-handle:active { cursor:grabbing; }
     .req-vote { display:flex; flex-direction:column; align-items:center; flex-shrink:0;
       gap:2px; min-width:30px; }
     .req-vote-btn { background:transparent; border:1px solid #333; color:#555;
@@ -339,6 +345,25 @@
     }
     .expiry-dismiss:hover { background: #2a1000; border-color: #ff6600; }
 
+    /* ── Push prefs popover ── */
+    #push-prefs-btn { background:transparent; border:1px solid #333; color:#555;
+      padding:4px 7px; border-radius:6px; cursor:pointer; font-size:.78em; display:none; }
+    #push-prefs-btn:hover { border-color:#888; color:#aaa; }
+    #push-prefs-panel { display:none; position:absolute; top:calc(100% + 6px); right:0;
+      background:#161616; border:1px solid #333; border-radius:10px;
+      padding:14px 16px; min-width:220px; z-index:100;
+      box-shadow:0 6px 24px rgba(0,0,0,.7); flex-direction:column; gap:10px; }
+    #push-prefs-panel.show { display:flex; }
+    .ppref-title { font-size:.72em; font-weight:bold; letter-spacing:1.5px;
+      color:#555; text-transform:uppercase; margin-bottom:2px; }
+    .ppref-row { display:flex; align-items:center; gap:8px; font-size:.82em; cursor:pointer; }
+    .ppref-row input[type=checkbox] { accent-color:var(--accent); width:14px; height:14px; cursor:pointer; }
+    .ppref-row span { color:#bbb; }
+    .ppref-unsub { width:100%; margin-top:4px; padding:6px; background:transparent;
+      border:1px solid #333; border-radius:6px; color:#666; cursor:pointer; font-size:.78em;
+      transition:.15s; }
+    .ppref-unsub:hover { border-color:#ff4444; color:#ff4444; }
+
     /* ─── Responsive ──────────────────────────────────────────── */
 
     /* Tablet: shrink chat panel */
@@ -348,20 +373,33 @@
 
     /* Mobile: chat becomes full-screen overlay, compress top bar */
     @media(max-width:600px){
+      /* Topbar */
       #topbar { padding:8px 10px; gap:6px; }
       #topbar h1 { font-size:1em; letter-spacing:1px; }
       #stream-title-wrap { max-width:120px; }
-      #viewer-badge { display:none !important; }
+      #viewer-badge,#health-badge { display:none !important; }
       #sub-badge { display:none; }
+      /* Hide low-priority topbar buttons to save space; accessible via profile page */
+      #username-display { display:none; }
+      button.logout-btn[onclick*="showChangePwd"] { display:none; }
 
+      /* Bottombar */
       #volume { flex:1; width:auto; min-width:0; }
       #fullscreen-btn { display:none; }
+      /* Shorten chat toggle label */
+      #chat-toggle-btn { font-size:0; padding:5px 10px; }
+      #chat-toggle-btn::before { content:'💬'; font-size:14px; }
 
+      /* Chat panel — full overlay */
       #main { position:relative; overflow:hidden; }
       #chat-panel { position:absolute; right:0; top:0; bottom:0;
         z-index:20; border-left:none; width:0; }
       #chat-panel.open { width:100%; }
+      /* Close button inside panel top bar (only visible on mobile) */
+      #panel-mobile-close { display:flex !important; }
     }
+    /* Hide mobile close button on desktop */
+    #panel-mobile-close { display:none; }
   </style>
 </head>
 <body>
@@ -400,6 +438,25 @@
               title="Picture-in-Picture" style="display:none">⛶</button>
       <button class="logout-btn" id="bell-btn" onclick="togglePushNotify()"
               title="Notify me when DJ goes live" style="display:none">🔕</button>
+      <div style="position:relative">
+        <button id="push-prefs-btn" onclick="togglePushPrefsPanel()" title="Notification preferences">⚙</button>
+        <div id="push-prefs-panel">
+          <div class="ppref-title">Notify me when…</div>
+          <label class="ppref-row">
+            <input type="checkbox" id="pref-goLive" onchange="savePushPref('goLive',this.checked)">
+            <span>DJ goes live</span>
+          </label>
+          <label class="ppref-row">
+            <input type="checkbox" id="pref-nextTrack" onchange="savePushPref('nextTrack',this.checked)">
+            <span>Next track announced</span>
+          </label>
+          <label class="ppref-row">
+            <input type="checkbox" id="pref-requestAccepted" onchange="savePushPref('requestAccepted',this.checked)">
+            <span>My request is accepted</span>
+          </label>
+          <button class="ppref-unsub" onclick="togglePushNotify();togglePushPrefsPanel()">Unsubscribe from all</button>
+        </div>
+      </div>
       <button class="logout-btn" onclick="showChangePwd()">🔑</button>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
@@ -468,9 +525,11 @@
     <!-- Side panel: Chat / Requests / Trending -->
     <div id="chat-panel">
       <!-- Panel top bar -->
-      <div style="display:flex;justify-content:flex-end;padding:6px 12px 0;flex-shrink:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px 0;flex-shrink:0">
         <a href="/profile.html" style="font-size:.75em;color:#555;text-decoration:none;transition:.15s"
            onmouseover="this.style.color='#ff4400'" onmouseout="this.style.color='#555'">My Profile →</a>
+        <button id="panel-mobile-close" onclick="toggleChat()"
+          style="background:transparent;border:none;color:#666;font-size:1.2em;cursor:pointer;padding:0 4px;line-height:1">✕</button>
       </div>
       <!-- Tab bar -->
       <div class="panel-tabs">
@@ -667,6 +726,16 @@
         updateBellBtn(_pushSub != null);
         document.getElementById('bell-btn').style.display = 'inline-block';
         window._vapidPublicKey = publicKey;
+        // Load initial prefs so checkboxes reflect saved state immediately
+        if (_pushSub) {
+          fetch('/api/push/prefs').then(r => r.ok ? r.json() : null).then(p => {
+            if (!p) return;
+            _pushPrefs = p;
+            document.getElementById('pref-goLive').checked           = !!p.goLive;
+            document.getElementById('pref-nextTrack').checked         = !!p.nextTrack;
+            document.getElementById('pref-requestAccepted').checked   = !!p.requestAccepted;
+          }).catch(() => {});
+        }
       } catch {}
     }
 
@@ -698,11 +767,51 @@
     }
 
     function updateBellBtn(on) {
-      const btn = document.getElementById('bell-btn');
+      const btn     = document.getElementById('bell-btn');
+      const prefBtn = document.getElementById('push-prefs-btn');
       if (!btn) return;
       btn.textContent = on ? '🔔' : '🔕';
       btn.title = on ? 'Notifications ON — click to disable' : 'Notify me when DJ goes live';
+      if (prefBtn) prefBtn.style.display = on ? 'inline-block' : 'none';
+      if (!on) document.getElementById('push-prefs-panel').classList.remove('show');
     }
+
+    let _pushPrefs = { goLive: true, nextTrack: false, requestAccepted: false };
+
+    function togglePushPrefsPanel() {
+      const panel = document.getElementById('push-prefs-panel');
+      const open  = panel.classList.toggle('show');
+      if (open) {
+        // Load latest prefs from server
+        fetch('/api/push/prefs').then(r => r.ok ? r.json() : null).then(p => {
+          if (!p) return;
+          _pushPrefs = p;
+          document.getElementById('pref-goLive').checked           = !!p.goLive;
+          document.getElementById('pref-nextTrack').checked         = !!p.nextTrack;
+          document.getElementById('pref-requestAccepted').checked   = !!p.requestAccepted;
+        }).catch(() => {});
+      }
+    }
+
+    async function savePushPref(key, val) {
+      _pushPrefs[key] = val;
+      try {
+        await fetch('/api/push/prefs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [key]: val })
+        });
+      } catch {}
+    }
+
+    // Close prefs panel when clicking outside
+    document.addEventListener('click', e => {
+      const panel = document.getElementById('push-prefs-panel');
+      if (!panel) return;
+      if (!panel.contains(e.target) && e.target.id !== 'push-prefs-btn') {
+        panel.classList.remove('show');
+      }
+    });
 
     function urlBase64ToUint8Array(b64) {
       const pad = '='.repeat((4 - b64.length % 4) % 4);
@@ -1455,7 +1564,10 @@
                 onclick="toggleReact('${r.id}','${e}')">${e}${count > 0 ? ' ' + count : ''}</button>`;
             }).join('')}</div>`
           : '';
-        return `<div class="req-card ${r.status}">
+        const draggable = r.status === 'pending' || r.status === 'accepted';
+        return `<div class="req-card ${r.status}" data-req-id="${r.id}"
+          ${draggable ? 'draggable="true" ondragstart="reqDragStart(event)" ondragover="reqDragOver(event)" ondrop="reqDrop(event)" ondragleave="reqDragLeave(event)" ondragend="reqDragEnd(event)"' : ''}>
+          ${draggable ? '<span class="req-drag-handle" title="Drag to reorder">⠿</span>' : ''}
           <div class="req-vote">
             <button class="${voteBtnClass}" ${voteCb} title="${canVote ? 'Upvote' : ''}">${hasVoted ? '▲' : '△'}</button>
             <span class="req-vote-count">${r.votes}</span>
@@ -1467,6 +1579,40 @@
           </div>
         </div>`;
       }).join('');
+    }
+
+    // ── Request drag-reorder (client-side local reorder) ─────────
+    let _reqDragId = null;
+    function reqDragStart(e) {
+      _reqDragId = e.currentTarget.dataset.reqId;
+      e.currentTarget.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    function reqDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const target = e.currentTarget;
+      if (target.dataset.reqId !== _reqDragId) target.classList.add('drag-over');
+    }
+    function reqDragLeave(e) {
+      e.currentTarget.classList.remove('drag-over');
+    }
+    function reqDrop(e) {
+      e.preventDefault();
+      const targetId = e.currentTarget.dataset.reqId;
+      e.currentTarget.classList.remove('drag-over');
+      if (!_reqDragId || targetId === _reqDragId) return;
+      const fromIdx = _requests.findIndex(r => r.id === _reqDragId);
+      const toIdx   = _requests.findIndex(r => r.id === targetId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [item] = _requests.splice(fromIdx, 1);
+      _requests.splice(toIdx, 0, item);
+      renderRequests(_requests);
+    }
+    function reqDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      document.querySelectorAll('.req-card.drag-over').forEach(el => el.classList.remove('drag-over'));
+      _reqDragId = null;
     }
 
     function showReqError(msg) {
