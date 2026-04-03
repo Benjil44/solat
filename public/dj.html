@@ -145,11 +145,11 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
 /* Camera / broadcast */
 .broadcast-card{background:var(--card);border:1px solid var(--border);
-  border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+  border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:7px}
 #cam-preview{width:100%;border-radius:8px;background:#000;
   aspect-ratio:16/9;object-fit:cover;display:none}
 #viz-canvas{width:100%;border-radius:8px;background:#000;
-  aspect-ratio:16/9;display:block}
+  aspect-ratio:16/9;display:none}
 .cam-btns{display:flex;gap:8px;flex-wrap:wrap}
 .cam-btn{flex:1;padding:8px 6px;background:var(--panel);border:1px solid var(--border);
   color:#ccc;border-radius:7px;cursor:pointer;font-size:.8em;text-align:center;transition:.15s}
@@ -1890,6 +1890,12 @@ function setBroadcastMode(mode) {
   broadcastMode = mode;
   document.getElementById('modeAudioBtn').classList.toggle('active', mode === 'audio');
   document.getElementById('modeVideoBtn').classList.toggle('active', mode === 'video');
+  // Show viz-canvas preview only when video mode is selected and no camera/screen active
+  if (mode === 'video' && !cameraStream && !screenStream) {
+    document.getElementById('viz-canvas').style.display = 'block';
+  } else if (mode === 'audio') {
+    document.getElementById('viz-canvas').style.display = 'none';
+  }
 }
 
 function toggleLive() {
