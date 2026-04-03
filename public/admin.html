@@ -635,7 +635,14 @@
   <div class="content">
     <div class="section-header">
       <div class="section-title">Audit Log</div>
-      <button class="btn-sm" onclick="loadAuditLog()">⟳ Refresh</button>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="audit-search" type="text" placeholder="Search actor / action / details…"
+          oninput="filterAuditLog()"
+          style="background:#111;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;
+                 padding:4px 10px;font-size:.8em;width:220px;outline:none">
+        <button class="btn-sm" onclick="exportAuditCSV()">⬇ CSV</button>
+        <button class="btn-sm" onclick="loadAuditLog()">⟳ Refresh</button>
+      </div>
     </div>
     <div id="audit-list"><div class="empty">Loading…</div></div>
   </div>
@@ -1406,13 +1413,29 @@
     }
 
     // ── Audit Log ─────────────────────────────────────────────────────────────
+    let _auditLog = [];
+
     async function loadAuditLog() {
       try {
         const res = await fetch('/api/admin/audit');
         if (!res.ok) return;
         const { log } = await res.json();
-        renderAuditLog(log);
+        _auditLog = log || [];
+        filterAuditLog();
       } catch {}
+    }
+
+    function filterAuditLog() {
+      const q = (document.getElementById('audit-search')?.value || '').toLowerCase().trim();
+      const filtered = q
+        ? _auditLog.filter(e => {
+            const details = Object.entries(e.details || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+            return String(e.actor).toLowerCase().includes(q)
+              || String(e.action).toLowerCase().includes(q)
+              || details.toLowerCase().includes(q);
+          })
+        : _auditLog;
+      renderAuditLog(filtered);
     }
 
     function renderAuditLog(log) {
@@ -1430,6 +1453,30 @@
           <span class="audit-details" title="${esc(details)}">${esc(details)}</span>
         </div>`;
       }).join('');
+    }
+
+    function exportAuditCSV() {
+      if (!_auditLog.length) return;
+      const q = (document.getElementById('audit-search')?.value || '').toLowerCase().trim();
+      const rows = q
+        ? _auditLog.filter(e => {
+            const details = Object.entries(e.details || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+            return String(e.actor).toLowerCase().includes(q)
+              || String(e.action).toLowerCase().includes(q)
+              || details.toLowerCase().includes(q);
+          })
+        : _auditLog;
+      const csvEsc = v => `"${String(v).replace(/"/g, '""')}"`;
+      const lines = [['Time','Actor','Action','Details'].map(csvEsc).join(',')];
+      rows.forEach(e => {
+        const details = Object.entries(e.details || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+        lines.push([e.time, e.actor, e.action, details].map(csvEsc).join(','));
+      });
+      const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `audit-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
     }
 
     function fmtDateTime(iso) {
