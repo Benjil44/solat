@@ -441,6 +441,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color-scheme:dark}
 .sched-row input:focus{border-color:var(--accent)}
 .sched-lbl{font-size:.72em;color:#666;text-align:center;margin-top:2px}
+.sched-lbl.active{color:#ff8844;font-weight:bold}
+.sched-countdown{font-size:1em;letter-spacing:1px}
 
 /* Toast */
 #toast{position:fixed;bottom:20px;right:20px;background:#222;border:1px solid var(--accent);
@@ -2437,9 +2439,7 @@ async function setSchedule() {
     body: JSON.stringify({ scheduledAt, repeat })
   });
   if (res.ok) {
-    const d = new Date(scheduledAt);
-    document.getElementById('schedLbl').textContent =
-      'Scheduled: ' + d.toLocaleString() + (repeat ? ' · weekly' : '');
+    startSchedCountdown(scheduledAt);
     toast('Schedule set — viewers will see a countdown');
   } else toast('Failed to set schedule', true);
 }
@@ -2451,8 +2451,46 @@ async function clearSched() {
     body: JSON.stringify({ scheduledAt: null })
   });
   document.getElementById('schedInput').value = '';
-  document.getElementById('schedLbl').textContent = '';
+  startSchedCountdown(null);
   toast('Schedule cleared');
+}
+
+// ── Schedule countdown ────────────────────────────────────────────────────
+let _schedAt = null;
+let _schedInterval = null;
+
+function fmtSchedCountdown(ms) {
+  if (ms <= 0) return 'Starting soon…';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60) % 60;
+  const h = Math.floor(s / 3600) % 24;
+  const d = Math.floor(s / 86400);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+function updateSchedLbl() {
+  const lbl = document.getElementById('schedLbl');
+  if (!_schedAt) { lbl.textContent = ''; lbl.className = 'sched-lbl'; return; }
+  const ms = new Date(_schedAt) - Date.now();
+  const timeStr = new Date(_schedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = new Date(_schedAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const repeat  = document.getElementById('schedRepeat')?.checked;
+  lbl.className = 'sched-lbl active';
+  if (ms <= 0) {
+    lbl.textContent = `⏰ ${dateStr} ${timeStr}${repeat ? ' · weekly' : ''} — starting soon`;
+  } else {
+    lbl.innerHTML = `⏰ ${dateStr} ${timeStr}${repeat ? ' · weekly' : ''} — <span class="sched-countdown">${fmtSchedCountdown(ms)}</span>`;
+  }
+}
+
+function startSchedCountdown(isoStr) {
+  _schedAt = isoStr;
+  clearInterval(_schedInterval);
+  updateSchedLbl();
+  if (_schedAt) _schedInterval = setInterval(updateSchedLbl, 1000);
 }
 
 // Load current schedule on page open
@@ -2461,15 +2499,12 @@ async function clearSched() {
     const r = await fetch('/api/schedule');
     const d = await r.json();
     if (d.scheduledAt) {
-      // Populate the input with local datetime
       const dt = new Date(d.scheduledAt);
-      // datetime-local format: YYYY-MM-DDTHH:MM
       const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
         .toISOString().slice(0, 16);
       document.getElementById('schedInput').value = local;
       if (d.repeat) document.getElementById('schedRepeat').checked = true;
-      document.getElementById('schedLbl').textContent =
-        'Scheduled: ' + dt.toLocaleString() + (d.repeat ? ' · weekly' : '');
+      startSchedCountdown(d.scheduledAt);
     }
   } catch {}
 })();
