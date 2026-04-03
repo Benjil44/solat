@@ -1114,9 +1114,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="pl-header">
         <span class="pl-lbl">PLAYLIST</span>
         <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
-        <button class="pl-add-btn" onclick="exportPlaylist()" title="Save playlist as JSON">💾 Save</button>
-        <button class="pl-add-btn" onclick="document.getElementById('plJsonInput').click()" title="Load saved playlist JSON">📂 Load</button>
-        <button class="pl-add-btn" id="shareUpcomingBtn" onclick="shareUpcoming()" title="Share upcoming tracks with viewers">📤 Share</button>
+        <button class="pl-add-btn" onclick="exportPlaylist()" title="Save playlist as JSON"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">save</span> Save</button>
+        <button class="pl-add-btn" onclick="document.getElementById('plJsonInput').click()" title="Load saved playlist JSON"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">folder_open</span> Load</button>
+        <button class="pl-add-btn" id="shareUpcomingBtn" onclick="shareUpcoming()" title="Share upcoming tracks with viewers"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">share</span> Share</button>
         <input type="file" id="plJsonInput" accept=".json" style="display:none"
           onchange="importPlaylist(this.files[0]);this.value=''">
         <input type="file" id="plFileInput" accept="audio/*" multiple style="display:none"
@@ -1676,7 +1676,7 @@ function drawWaveformCursor(id, elapsed, duration) {
   }
 
   // Cue point markers
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     if (deck.cues[i] === null || !duration) continue;
     const cf = deck.cues[i] / duration;
     if (!inView(cf)) continue;
@@ -3003,6 +3003,60 @@ function renderPlaylist() {
       <button class="pl-del" onclick="removeFromPlaylist(${i})">✕</button>
     </div>`;
   }).join('');
+  autoSavePlaylist();
+}
+
+function autoSavePlaylist() {
+  try {
+    const meta = playlist.filter(t => !t.loading).map(t => ({
+      name: t.name, duration: t.duration || 0,
+      bpm: t._bpm || null, key: t._key || null,
+      cues: t.cues || [null,null,null,null],
+      _id: t._id,
+    }));
+    if (meta.length) localStorage.setItem('dj_playlist_autosave', JSON.stringify(meta));
+    else             localStorage.removeItem('dj_playlist_autosave');
+  } catch (_) {}
+}
+
+function checkPlaylistRestore() {
+  try {
+    const raw = localStorage.getItem('dj_playlist_autosave');
+    if (!raw || playlist.length) return;
+    const meta = JSON.parse(raw);
+    if (!meta.length) return;
+    const banner = document.createElement('div');
+    banner.id = 'restore-banner';
+    banner.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);' +
+      'background:#111;border:1px solid #444;border-radius:10px;padding:10px 16px;' +
+      'display:flex;align-items:center;gap:10px;font-size:.82em;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.7)';
+    banner.innerHTML = `<span style="color:#ccc"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">history</span> Restore ${meta.length} track${meta.length>1?'s':''} from last session?</span>
+      <button onclick="restorePlaylist()" style="background:#ff4400;border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.9em">Restore</button>
+      <button onclick="dismissRestore()" style="background:transparent;border:1px solid #444;color:#888;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.9em">Dismiss</button>`;
+    document.body.appendChild(banner);
+  } catch (_) {}
+}
+
+function restorePlaylist() {
+  try {
+    const meta = JSON.parse(localStorage.getItem('dj_playlist_autosave') || '[]');
+    meta.forEach(t => playlist.push({
+      name: t.name || 'Unknown', duration: t.duration || 0,
+      _bpm: t.bpm || null, _key: t.key || null,
+      cues: t.cues || [null,null,null,null],
+      buffer: null, loading: false, _id: t._id || Math.random().toString(36).slice(2,10),
+    }));
+    renderPlaylist();
+    switchBTab('playlist');
+    toast(`Restored ${meta.length} track(s) — re-add audio files to play`);
+  } catch (_) { toast('Restore failed', true); }
+  dismissRestore();
+}
+
+function dismissRestore() {
+  localStorage.removeItem('dj_playlist_autosave');
+  const b = document.getElementById('restore-banner');
+  if (b) b.remove();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3315,7 +3369,7 @@ function animateCrossfader(from, to, durationSec, onDone) {
 // ═══════════════════════════════════════════════════════════════
 //  CUE POINTS
 // ═══════════════════════════════════════════════════════════════
-const CUE_COLORS  = ['#ffcc00', '#00ccff', '#44ff88'];
+const CUE_COLORS  = ['#ffcc00', '#00ccff', '#44ff88', '#ff44aa'];
 const CUE_CLASSES = ['set0', 'set1', 'set2', 'set3'];
 
 function triggerCue(id, idx) {
@@ -3996,6 +4050,7 @@ if (!ADMIN_KEY) {
   setInterval(pollStatus, 5000);
   pollStatus();
   loadInitialDJRequests();
+  setTimeout(checkPlaylistRestore, 800);
   // Resume audio context on first interaction
   document.addEventListener('click', () => {
     if (audioCtx.state === 'suspended') audioCtx.resume();
