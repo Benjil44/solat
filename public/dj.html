@@ -1807,10 +1807,11 @@ async function toggleCamera() {
     document.getElementById('viz-canvas').style.display = 'block';
     document.getElementById('camBtn').classList.remove('active');
     broadcastVideoTrack = null;
+    _swapBroadcastVideo(null);
     toast('Camera off');
   } else {
     try {
-      if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+      if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; document.getElementById('screenBtn').classList.remove('active'); }
       cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width:1280, height:720 }, audio: false });
       const preview = document.getElementById('cam-preview');
       preview.srcObject = cameraStream;
@@ -1819,7 +1820,9 @@ async function toggleCamera() {
       document.getElementById('camBtn').classList.add('active');
       document.getElementById('screenBtn').classList.remove('active');
       broadcastVideoTrack = cameraStream.getVideoTracks()[0];
-      toast('Camera on');
+      _swapBroadcastVideo(broadcastVideoTrack);
+      if (isLive && broadcastMode === 'audio') toast('Camera preview on — switch to Audio+Video mode before going live to show viewers');
+      else toast('Camera on');
     } catch (e) { toast('Camera not available: ' + e.message, true); }
   }
 }
@@ -1832,10 +1835,11 @@ async function toggleScreen() {
     document.getElementById('viz-canvas').style.display = 'block';
     document.getElementById('screenBtn').classList.remove('active');
     broadcastVideoTrack = null;
+    _swapBroadcastVideo(null);
     toast('Screen share off');
   } else {
     try {
-      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; document.getElementById('camBtn').classList.remove('active'); }
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const preview = document.getElementById('cam-preview');
       preview.srcObject = screenStream;
@@ -1844,13 +1848,16 @@ async function toggleScreen() {
       document.getElementById('screenBtn').classList.add('active');
       document.getElementById('camBtn').classList.remove('active');
       broadcastVideoTrack = screenStream.getVideoTracks()[0];
+      _swapBroadcastVideo(broadcastVideoTrack);
       screenStream.getVideoTracks()[0].onended = () => {
         screenStream = null; broadcastVideoTrack = null;
         document.getElementById('cam-preview').style.display = 'none';
         document.getElementById('viz-canvas').style.display = 'block';
         document.getElementById('screenBtn').classList.remove('active');
+        _swapBroadcastVideo(null);
       };
-      toast('Screen sharing on');
+      if (isLive && broadcastMode === 'audio') toast('Screen preview on — switch to Audio+Video mode before going live to show viewers');
+      else toast('Screen sharing on');
     } catch (e) { toast('Screen share failed: ' + e.message, true); }
   }
 }
@@ -1876,12 +1883,20 @@ async function toggleMic() {
   }
 }
 
+// Swap the video track in broadcastStream while live (video mode only)
+function _swapBroadcastVideo(newTrack) {
+  if (!broadcastStream || broadcastMode !== 'video') return;
+  broadcastStream.getVideoTracks().forEach(t => broadcastStream.removeTrack(t));
+  const track = newTrack || document.getElementById('viz-canvas').captureStream(25).getVideoTracks()[0];
+  if (track) broadcastStream.addTrack(track);
+}
+
 let monitorMuted = false;
 function toggleMonitorMute() {
   monitorMuted = !monitorMuted;
   monitorGain.gain.value = monitorMuted ? 0 : 1;
   const btn = document.getElementById('monitorMuteBtn');
-  btn.querySelector('.material-symbols-outlined').textContent = monitorMuted ? 'headphones_off' : 'headphones';
+  btn.querySelector('.material-symbols-outlined').textContent = monitorMuted ? 'hearing_disabled' : 'headphones';
   btn.classList.toggle('active', monitorMuted);
   toast(monitorMuted ? 'Monitor muted (stream still live)' : 'Monitor unmuted');
 }
