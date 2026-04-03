@@ -77,6 +77,7 @@ canvas.waveform{display:block;width:100%;height:60px}
 .t-btn{background:var(--panel);border:1px solid var(--border);color:#ccc;
   width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1em;
   display:flex;align-items:center;justify-content:center;transition:.15s}
+.t-btn .material-symbols-outlined{font-size:18px}
 .t-btn:hover{border-color:var(--accent);color:var(--accent)}
 .t-btn.play-btn{width:38px;height:38px;font-size:1.2em;background:var(--accent);
   border-color:var(--accent);color:#fff}
@@ -740,7 +741,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <!-- Load track / Waveform (same slot — mutually exclusive) -->
     <div class="load-area" id="loadA" ondragover="dragOver(event,'A')" ondrop="dropFile(event,'A')" ondragleave="dragLeave('A')">
       <input type="file" id="fileInputA" accept="audio/*" onchange="loadFile(event,'A')">
-      <div class="icon">🎵</div>
+      <div class="icon"><span class="material-symbols-outlined" style="font-size:1.6em">audio_file</span></div>
       <div class="hint">Click or drag a music file here</div>
     </div>
     <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'A')" onwheel="zoomWaveform(event,'A')"
@@ -756,7 +757,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="tap-btn" onclick="tapTempo('A')">TAP</button>
       <button class="nudge-btn" onclick="nudgeSpeed('A',-0.01)" title="Slow down slightly">◀</button>
       <button class="nudge-btn" onclick="nudgeSpeed('A', 0.01)" title="Speed up slightly">▶</button>
-      <button class="reset-tempo-btn" id="resetTempA" onclick="gradualResetTempo('A')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarA"></span></button>
+      <button class="reset-tempo-btn" id="resetTempA" onclick="gradualResetTempo('A')" title="Smoothly ramp tempo back to 100%"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">replay</span> 100%<span class="ramp-bar" id="rampBarA"></span></button>
       <button class="sync-btn" id="syncBtnA" onclick="syncBPM('A')" title="Match this deck's BPM to Deck B">SYNC</button>
     </div>
     <div class="key-row">
@@ -766,9 +767,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
     <!-- Transport -->
     <div class="transport">
-      <button class="t-btn" onclick="seekDeck('A',-10)" title="−10s">⏮</button>
-      <button class="t-btn play-btn" id="playBtnA" onclick="togglePlay('A')">▶</button>
-      <button class="t-btn" onclick="seekDeck('A',10)" title="+10s">⏭</button>
+      <button class="t-btn" onclick="seekDeck('A',-10)" title="−10s"><span class="material-symbols-outlined">replay_10</span></button>
+      <button class="t-btn play-btn" id="playBtnA" onclick="togglePlay('A')"><span class="material-symbols-outlined">play_arrow</span></button>
+      <button class="t-btn" onclick="seekDeck('A',10)" title="+10s"><span class="material-symbols-outlined">forward_10</span></button>
       <span class="time-display" id="timeA">0:00 / 0:00</span>
     </div>
 
@@ -906,6 +907,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <button class="title-btn" onclick="updateNextTrack()">Next</button>
       </div>
 
+      <div id="key-compat-badge" style="display:none;font-size:.72em;font-weight:bold;
+        letter-spacing:.5px;text-align:center;padding:3px 0"></div>
+
       <div class="track-name-row">
         <span class="tn-label"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">visibility</span> Track Names</span>
         <button class="track-name-toggle active" id="trackNameToggle" onclick="toggleTrackName()">ON</button>
@@ -955,7 +959,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <!-- Load track / Waveform (same slot — mutually exclusive) -->
     <div class="load-area" id="loadB" ondragover="dragOver(event,'B')" ondrop="dropFile(event,'B')" ondragleave="dragLeave('B')">
       <input type="file" id="fileInputB" accept="audio/*" onchange="loadFile(event,'B')">
-      <div class="icon">🎵</div>
+      <div class="icon"><span class="material-symbols-outlined" style="font-size:1.6em">audio_file</span></div>
       <div class="hint">Click or drag a music file here</div>
     </div>
     <div class="waveform-wrap zoom-wrap" onclick="seekDeckByClick(event,'B')" onwheel="zoomWaveform(event,'B')"
@@ -971,7 +975,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="tap-btn" onclick="tapTempo('B')">TAP</button>
       <button class="nudge-btn" onclick="nudgeSpeed('B',-0.01)" title="Slow down slightly">◀</button>
       <button class="nudge-btn" onclick="nudgeSpeed('B', 0.01)" title="Speed up slightly">▶</button>
-      <button class="reset-tempo-btn" id="resetTempB" onclick="gradualResetTempo('B')" title="Smoothly ramp tempo back to 100%">↺ 100%<span class="ramp-bar" id="rampBarB"></span></button>
+      <button class="reset-tempo-btn" id="resetTempB" onclick="gradualResetTempo('B')" title="Smoothly ramp tempo back to 100%"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">replay</span> 100%<span class="ramp-bar" id="rampBarB"></span></button>
       <button class="sync-btn" id="syncBtnB" onclick="syncBPM('B')" title="Match this deck's BPM to Deck A">SYNC</button>
     </div>
     <div class="key-row">
@@ -980,9 +984,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     </div>
 
     <div class="transport">
-      <button class="t-btn" onclick="seekDeck('B',-10)" title="−10s">⏮</button>
-      <button class="t-btn play-btn" id="playBtnB" onclick="togglePlay('B')">▶</button>
-      <button class="t-btn" onclick="seekDeck('B',10)" title="+10s">⏭</button>
+      <button class="t-btn" onclick="seekDeck('B',-10)" title="−10s"><span class="material-symbols-outlined">replay_10</span></button>
+      <button class="t-btn play-btn" id="playBtnB" onclick="togglePlay('B')"><span class="material-symbols-outlined">play_arrow</span></button>
+      <button class="t-btn" onclick="seekDeck('B',10)" title="+10s"><span class="material-symbols-outlined">forward_10</span></button>
       <span class="time-display" id="timeB">0:00 / 0:00</span>
     </div>
 
@@ -1127,7 +1131,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
             style="width:70px;accent-color:var(--yellow)"
             oninput="autoDJCrossfadeTime=+this.value;document.getElementById('xfadeTimeVal').textContent=this.value+'s'">
           <span id="xfadeTimeVal">8s</span>
-          <button class="autodj-btn" id="autoDJBtn" onclick="toggleAutoDJ()">▶▶ AUTO DJ</button>
+          <button class="autodj-btn" id="autoDJBtn" onclick="toggleAutoDJ()"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">playlist_play</span> AUTO DJ</button>
         </div>
       </div>
       <div id="playlist-tracks" style="flex:1;overflow-y:auto">
@@ -1485,7 +1489,7 @@ function seekDeck(id, secs) {
 function updatePlayBtn(id) {
   const btn = document.getElementById('playBtn' + id);
   const d = decks[id];
-  btn.textContent = d.playing ? '⏸' : '▶';
+  btn.innerHTML = `<span class="material-symbols-outlined">${d.playing ? 'pause' : 'play_arrow'}</span>`;
   btn.classList.toggle('playing', d.playing);
 }
 
@@ -3218,7 +3222,7 @@ function stopAutoDJ() {
   autoDJCurrentIdx    = -1;
   autoDJTransitioning = false;
   document.getElementById('autoDJBtn').classList.remove('on');
-  document.getElementById('autoDJBtn').textContent = '▶▶ AUTO DJ';
+  document.getElementById('autoDJBtn').innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">playlist_play</span> AUTO DJ';
   setCfAutoStatus('');
   toast('Auto DJ stopped');
   renderPlaylist();
@@ -3523,7 +3527,7 @@ function updateLoopBtns(id) {
   if (loopBtn) {
     if (loop.active) {
       loopBtn.className = 'loop-btn loop-on';
-      loopBtn.textContent = '⟳ LOOP';
+      loopBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">loop</span> LOOP';
     } else if (loop.in !== null && loop.out !== null) {
       loopBtn.className = 'loop-btn loop-ready';
       loopBtn.textContent = 'LOOP';
@@ -3754,10 +3758,68 @@ function detectKey(audioBuffer) {
   }, 0));
 }
 
+// ── Camelot wheel ─────────────────────────────────────────────────────────────
+const _CAMELOT = {
+  'C maj':'5B',  'C min':'5A',
+  'C# maj':'12B','C# min':'12A',
+  'D maj':'7B',  'D min':'7A',
+  'Eb maj':'2B', 'Eb min':'2A',
+  'E maj':'9B',  'E min':'9A',
+  'F maj':'4B',  'F min':'4A',
+  'F# maj':'11B','F# min':'11A',
+  'G maj':'6B',  'G min':'6A',
+  'Ab maj':'1B', 'Ab min':'1A',
+  'A maj':'8B',  'A min':'8A',
+  'Bb maj':'3B', 'Bb min':'3A',
+  'B maj':'10B', 'B min':'10A',
+};
+
+function _camelotCode(key) { return key ? (_CAMELOT[key] || null) : null; }
+
+function _camelotCompat(c1, c2) {
+  if (!c1 || !c2) return null;
+  const n1 = parseInt(c1), l1 = c1.slice(-1);
+  const n2 = parseInt(c2), l2 = c2.slice(-1);
+  if (n1 === n2 && l1 === l2) return 'same';       // identical
+  if (n1 === n2 && l1 !== l2) return 'relative';   // relative major/minor (same number)
+  const diff = ((n2 - n1 + 12) % 12);
+  if ((diff === 1 || diff === 11) && l1 === l2) return 'adjacent'; // ±1 step same mode
+  return 'clash';
+}
+
 function showKey(id, key) {
   const el = document.getElementById('key' + id);
-  if (el) el.textContent = key || '—';
   if (decks[id]) decks[id]._key = key;
+  const code = _camelotCode(key);
+  if (el) el.textContent = key ? (code ? `${key} · ${code}` : key) : '—';
+  checkKeyCompat();
+}
+
+function checkKeyCompat() {
+  const kA = decks.A._key, kB = decks.B._key;
+  const elA = document.getElementById('keyA'), elB = document.getElementById('keyB');
+  const badge = document.getElementById('key-compat-badge');
+  if (!kA || !kB) {
+    if (elA) elA.style.color = '';
+    if (elB) elB.style.color = '';
+    if (badge) badge.style.display = 'none';
+    return;
+  }
+  const compat = _camelotCompat(_camelotCode(kA), _camelotCode(kB));
+  const cfg = {
+    same:     { color:'#44ff88', label:'✓ Same Key',       title:'Perfect match' },
+    relative: { color:'#88ffcc', label:'♻ Relative',       title:'Relative major/minor — safe mix' },
+    adjacent: { color:'#ffcc44', label:'~ Adjacent',       title:'1 step apart — smooth transition' },
+    clash:    { color:'#ff5555', label:'✕ Key Clash',      title:'Incompatible keys — may sound dissonant' },
+  }[compat] || { color:'', label:'', title:'' };
+  if (elA) elA.style.color = cfg.color;
+  if (elB) elB.style.color = cfg.color;
+  if (badge) {
+    badge.textContent = cfg.label;
+    badge.title       = cfg.title;
+    badge.style.color   = cfg.color;
+    badge.style.display = cfg.label ? 'block' : 'none';
+  }
 }
 
 // Tap tempo
