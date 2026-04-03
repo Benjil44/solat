@@ -31,8 +31,8 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 .hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ── Main layout ── */
-.studio{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;grid-template-rows:auto auto;
-  gap:10px;padding:10px;overflow:auto;align-items:start}
+.studio{flex:0 0 auto;display:grid;grid-template-columns:1fr 240px 1fr;grid-template-rows:auto auto;
+  gap:10px;padding:10px;align-items:start}
 
 /* ── Deck card ── */
 .deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;
@@ -338,6 +338,18 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   background:#0d0d0d;border-radius:5px;font-size:.8em}
 .setlist-time{color:var(--muted);font-size:.75em;min-width:46px;flex-shrink:0}
 .setlist-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ddd}
+
+/* ── Bottom tabbed panel ── */
+.bottom-tabs-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  margin:0 10px 10px;overflow:hidden}
+.bottom-tabs-bar{display:flex;border-bottom:1px solid var(--border);background:var(--panel)}
+.btab{flex:1;padding:8px 6px;background:transparent;border:none;border-bottom:2px solid transparent;
+  color:var(--muted);cursor:pointer;font-size:.75em;font-weight:bold;letter-spacing:.5px;
+  text-transform:uppercase;transition:.15s;white-space:nowrap}
+.btab:hover{color:#ccc}
+.btab.active{color:#fff;border-bottom-color:var(--accent)}
+.btab-panel{display:none;padding:10px 14px;max-height:280px;overflow-y:auto}
+.btab-panel.active{display:block}
 
 /* ── Requests panel ── */
 .requests-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
@@ -901,19 +913,29 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
         ● GO LIVE
       </button>
-      <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
-      <div class="rec-timer" id="recTimer"></div>
 
-      <!-- Go-live schedule -->
-      <div class="sched-row">
-        <input type="datetime-local" id="schedInput" title="Schedule a go-live time for viewers">
-        <button class="title-btn" onclick="setSchedule()">📅 Set</button>
-        <button class="title-btn" onclick="clearSched()" title="Clear schedule" style="padding:7px 10px">✕</button>
+      <!-- Record + Schedule accordion -->
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <button onclick="toggleRecSched()" id="recSchedToggle"
+          style="width:100%;background:var(--panel);border:none;color:#888;font-size:.75em;
+                 padding:6px 10px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px">
+          <span id="recSchedArrow" style="transition:transform .2s">▶</span>
+          ⏺ Record &amp; Schedule
+          <span id="recTimer" style="margin-left:auto;color:var(--accent);font-variant-numeric:tabular-nums"></span>
+        </button>
+        <div id="recSchedBody" style="display:none;padding:8px 10px;display:none;flex-direction:column;gap:7px;background:var(--bg)">
+          <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
+          <div class="sched-row">
+            <input type="datetime-local" id="schedInput" title="Schedule a go-live time for viewers">
+            <button class="title-btn" onclick="setSchedule()">📅 Set</button>
+            <button class="title-btn" onclick="clearSched()" title="Clear schedule" style="padding:7px 10px">✕</button>
+          </div>
+          <label class="sched-repeat">
+            <input type="checkbox" id="schedRepeat"> Weekly repeat
+          </label>
+          <div class="sched-lbl" id="schedLbl"></div>
+        </div>
       </div>
-      <label class="sched-repeat">
-        <input type="checkbox" id="schedRepeat"> Weekly repeat
-      </label>
-      <div class="sched-lbl" id="schedLbl"></div>
 
       <!-- OBS Setup -->
       <button class="obs-toggle" onclick="toggleOBSPanel()">🎛 OBS / External Source</button>
@@ -1098,50 +1120,44 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
 </div><!-- /studio -->
 
-<!-- ═══ SETLIST ═══ -->
-<div class="setlist-card">
-  <div class="setlist-header">
-    <span class="setlist-lbl">🎵 Setlist</span>
-    <button class="setlist-dl" onclick="downloadSetlist()">⬇ Download .txt</button>
+<!-- ═══ BOTTOM TABS: Setlist / Pads / Queue / Requests ═══ -->
+<div class="bottom-tabs-wrap">
+  <div class="bottom-tabs-bar">
+    <button class="btab active" id="btab-setlist"  onclick="switchBTab('setlist')">🎵 Setlist</button>
+    <button class="btab"        id="btab-pads"     onclick="switchBTab('pads')">🎹 Pads</button>
+    <button class="btab"        id="btab-queue"    onclick="switchBTab('queue')">
+      Play Queue <span id="queue-count" style="color:var(--accent)">0</span>
+    </button>
+    <button class="btab"        id="btab-requests" onclick="switchBTab('requests')">
+      🎤 Requests <span class="req-panel-badge" id="req-panel-badge"></span>
+    </button>
   </div>
-  <div id="setlist-items">
-    <div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>
-  </div>
-</div>
 
-<!-- ═══ SAMPLE PADS ═══ -->
-<div class="samplepad-panel">
-  <div class="samplepad-hdr" onclick="toggleSamplePad()">
-    <span class="samplepad-lbl">Sample Pads</span>
-    <span style="font-size:.72em;color:var(--muted);margin-left:4px">Z X C V B N M ,</span>
-    <span id="samplepad-arrow" style="margin-left:auto;font-size:.75em;color:#444">▶</span>
-  </div>
-  <div class="samplepad-body" id="samplepad-body"></div>
-</div>
-
-<!-- ═══ PLAY QUEUE ═══ -->
-<div class="queue-panel" id="queue-panel">
-  <div class="queue-hdr">
-    <span class="queue-lbl">Play Queue</span>
-    <span id="queue-count" style="font-size:.72em;color:var(--muted);margin-left:4px">0</span>
-    <span style="margin-left:auto;font-size:.72em;color:var(--muted)">accepted requests · auto-loads when DJ is on</span>
-  </div>
-  <div id="queue-list"><div class="queue-empty">No accepted requests — accept requests below to build queue</div></div>
-</div>
-
-<!-- ═══ REQUESTS PANEL ═══ -->
-<div class="requests-panel" id="requests-panel">
-  <div class="req-panel-hdr" id="req-panel-hdr" onclick="toggleReqPanel()">
-    <span class="req-panel-title">
-      🎤 Requests
-      <span class="req-panel-badge" id="req-panel-badge"></span>
-    </span>
-    <div class="req-panel-actions">
-      <button class="req-clear-btn" onclick="event.stopPropagation();djClearRequests()">Clear played</button>
-      <span class="req-panel-arrow" id="req-panel-arrow">▶</span>
+  <!-- Setlist tab -->
+  <div class="btab-panel active" id="btabp-setlist">
+    <div style="display:flex;align-items:center;justify-content:flex-end;padding:4px 0 8px">
+      <button class="setlist-dl" onclick="downloadSetlist()">⬇ Download .txt</button>
+    </div>
+    <div id="setlist-items">
+      <div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>
     </div>
   </div>
-  <div class="req-panel-body" id="req-panel-body">
+
+  <!-- Pads tab -->
+  <div class="btab-panel" id="btabp-pads">
+    <div class="samplepad-body open" id="samplepad-body" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Queue tab -->
+  <div class="btab-panel" id="btabp-queue">
+    <div id="queue-list" style="margin-top:8px"><div class="queue-empty">No accepted requests — accept requests below to build queue</div></div>
+  </div>
+
+  <!-- Requests tab -->
+  <div class="btab-panel" id="btabp-requests">
+    <div style="display:flex;justify-content:flex-end;padding:4px 0 8px">
+      <button class="req-clear-btn" onclick="djClearRequests()">Clear played</button>
+    </div>
     <div id="dj-req-list"><div class="req-panel-empty">No requests yet</div></div>
   </div>
 </div>
@@ -2272,6 +2288,22 @@ function saveMixFile() {
   document.getElementById('obsRtmp').textContent = rtmp;
   document.getElementById('obsKey').textContent  = STREAM_KEY;
 })();
+
+// ── Bottom tab switcher ───────────────────────────────────────
+function switchBTab(name) {
+  document.querySelectorAll('.btab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.btab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('btab-' + name).classList.add('active');
+  document.getElementById('btabp-' + name).classList.add('active');
+}
+
+function toggleRecSched() {
+  const body  = document.getElementById('recSchedBody');
+  const arrow = document.getElementById('recSchedArrow');
+  const open  = body.style.display === 'flex';
+  body.style.display  = open ? 'none' : 'flex';
+  arrow.style.transform = open ? '' : 'rotate(90deg)';
+}
 
 function toggleOBSPanel() {
   document.getElementById('obsPanel').classList.toggle('show');
@@ -3866,9 +3898,7 @@ const pads = Array.from({ length: PAD_COUNT }, () => ({ buffer: null, name: '' }
 let _samplePadOpen = false;
 
 function toggleSamplePad() {
-  _samplePadOpen = !_samplePadOpen;
-  document.getElementById('samplepad-body').classList.toggle('open', _samplePadOpen);
-  document.getElementById('samplepad-arrow').textContent = _samplePadOpen ? '▼' : '▶';
+  switchBTab('pads');
 }
 
 function renderPads() {
@@ -4067,15 +4097,10 @@ function setupQueueDrag(container) {
 }
 
 function toggleReqPanel() {
-  _djReqPanelOpen = !_djReqPanelOpen;
-  document.getElementById('req-panel-hdr').classList.toggle('open', _djReqPanelOpen);
-  document.getElementById('req-panel-body').classList.toggle('open', _djReqPanelOpen);
-  document.getElementById('req-panel-arrow').classList.toggle('open', _djReqPanelOpen);
-  // Clear badge when opened
-  if (_djReqPanelOpen) {
-    const b = document.getElementById('req-panel-badge');
-    b.textContent = ''; b.classList.remove('show');
-  }
+  // Now just switch to requests tab
+  switchBTab('requests');
+  const b = document.getElementById('req-panel-badge');
+  if (b) { b.textContent = ''; b.classList.remove('show'); }
 }
 
 function renderDJRequests(reqs) {
@@ -4088,10 +4113,7 @@ function renderDJRequests(reqs) {
   if (pending.length > 0) {
     badge.textContent = pending.length;
     badge.classList.add('show');
-    if (!_djReqPanelOpen) {
-      // Auto-open panel on first request
-      if (pending.length === 1 && done.length === 0) toggleReqPanel();
-    }
+    if (pending.length === 1 && done.length === 0) switchBTab('requests');
   } else {
     badge.textContent = ''; badge.classList.remove('show');
   }
