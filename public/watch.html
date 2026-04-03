@@ -170,11 +170,22 @@
     #live-badge { position:absolute; top:12px; left:12px; background:var(--accent); color:#fff;
       font-size:.75em; font-weight:bold; padding:3px 9px; border-radius:4px; letter-spacing:1px;
       z-index:6; display:none; }
-    #unmute-hint { position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
-      background:rgba(0,0,0,.75); color:#fff; font-size:.85em; padding:7px 16px;
-      border-radius:20px; cursor:pointer; z-index:7; display:none;
-      border:1px solid rgba(255,255,255,.2); white-space:nowrap; }
-    #unmute-hint:hover { background:rgba(255,80,0,.85); }
+    #unmute-hint {
+      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      flex-direction:column; gap:14px; cursor:pointer; z-index:7;
+      background:rgba(0,0,0,.55); }
+    #unmute-hint.show { display:flex; }
+    #unmute-hint .unmute-circle {
+      width:88px; height:88px; border-radius:50%;
+      background:rgba(255,68,0,.9); display:flex; align-items:center; justify-content:center;
+      font-size:2.4em; box-shadow:0 0 0 0 rgba(255,68,0,.5);
+      animation:unmute-pulse 1.6s ease-in-out infinite; }
+    @keyframes unmute-pulse {
+      0%,100%{ box-shadow:0 0 0 0 rgba(255,68,0,.5); }
+      50%    { box-shadow:0 0 0 22px rgba(255,68,0,0); } }
+    #unmute-hint .unmute-label {
+      color:#fff; font-size:1.1em; font-weight:bold; letter-spacing:.5px;
+      text-shadow:0 1px 4px rgba(0,0,0,.8); }
 
     /* ── Buffer progress bar (top of screen while loading) ── */
     #buf-bar { position:fixed; top:0; left:0; height:3px; width:0%;
@@ -484,7 +495,10 @@
     <div id="video-side">
       <div id="video-wrap">
         <span id="live-badge">LIVE</span>
-        <div id="unmute-hint" onclick="manualUnmute()">🔇 Click to unmute</div>
+        <div id="unmute-hint" onclick="manualUnmute()">
+          <div class="unmute-circle"><span class="material-symbols-outlined" style="font-size:2rem;color:#fff;text-transform:none;letter-spacing:0">volume_off</span></div>
+          <div class="unmute-label">Tap anywhere to unmute</div>
+        </div>
         <!-- audio-only video element (invisible) -->
         <video id="player" autoplay playsinline muted></video>
 
@@ -993,7 +1007,7 @@
             video.volume = 0;
             video.muted  = true;
             video.play().then(() => {
-              document.getElementById('unmute-hint').style.display = 'block';
+              document.getElementById('unmute-hint').classList.add('show');
             }).catch(showPlayPrompt);
           } else {
             // User already unmuted — restore volume and play unmuted (no hint needed)
@@ -1102,7 +1116,7 @@
       if (_vizFrame) { cancelAnimationFrame(_vizFrame); _vizFrame = null; }
       _vizInit = false; // allow re-init on next connect
       // Hide unmute hint
-      document.getElementById('unmute-hint').style.display = 'none';
+      document.getElementById('unmute-hint').classList.remove('show');
       userHasUnmuted = false;  // reset for next stream session
       // Reset to artwork view and hide the toggle
       video.classList.remove('visible');
@@ -1216,7 +1230,7 @@
     function initVisualizer() {
       if (_vizInit) return;
       const canvas = document.getElementById('visualizer');
-      if (!canvas || !window.AudioContext) return;
+      if (!canvas || !(window.AudioContext || window.webkitAudioContext)) return;
       try {
         const actx     = new (window.AudioContext || window.webkitAudioContext)();
         const analyser = actx.createAnalyser();
@@ -1276,14 +1290,17 @@
     function manualPlay() {
       video.muted = false;
       video.play();
-      document.getElementById('unmute-hint').style.display = 'none';
+      document.getElementById('unmute-hint').classList.remove('show');
       hideOverlay();
     }
 
     function manualUnmute() {
       userHasUnmuted = true;
-      document.getElementById('unmute-hint').style.display = 'none';
+      document.getElementById('unmute-hint').classList.remove('show');
       video.muted = false;
+      // Re-attempt visualizer init now that we have a user gesture (needed on TV/mobile)
+      _vizInit = false;
+      initVisualizer();
       let targetVol = parseFloat(document.getElementById('volume').value);
       if (!(targetVol > 0)) {
         // Slider is at 0 — bump to a reasonable default so the user can actually hear
@@ -1299,9 +1316,15 @@
       }, 60);
     }
 
+    // Click anywhere on video-wrap to unmute (TV-friendly — no precise click needed)
+    document.getElementById('video-wrap').addEventListener('click', (e) => {
+      if (!document.getElementById('unmute-hint').classList.contains('show')) return;
+      manualUnmute();
+    });
+
     // ── Controls ──────────────────────────────────────────────
     function setVolume(v) {
-      document.getElementById('unmute-hint').style.display = 'none';
+      document.getElementById('unmute-hint').classList.remove('show');
       video.muted  = false;
       video.volume = parseFloat(v);
       localStorage.setItem('djVol', v);
