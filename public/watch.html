@@ -941,7 +941,8 @@
         if (d.live && d.manifestReady && !isPlaying && !isConnecting) {
           startStream(d.streamKey);
         } else if (d.live && !d.manifestReady && !isPlaying && !isConnecting) {
-          // Manifest not ready yet (FFmpeg still starting) — poll again in 2s silently
+          // Manifest not ready yet (FFmpeg still starting) — show loading state, retry in 2s
+          showLoadingStream();
           clearTimeout(pollTimer);
           pollTimer = setTimeout(pollStatus, 2000);
           return;
@@ -1167,7 +1168,21 @@
       return `in ${s}s`;
     }
 
+    let _loadingShown = false;
+    function showLoadingStream() {
+      if (_loadingShown) return; // already showing loading state
+      _loadingShown = true;
+      clearInterval(countdownInterval);
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <div class="vinyl"></div>
+        <div id="overlay-title">DJ is Live</div>
+        <div id="overlay-sub">Loading stream…</div>
+        <div id="overlay-countdown"></div>`;
+    }
+
     function showOffline() {
+      _loadingShown = false;
       clearInterval(countdownInterval);
       overlay.style.display = 'flex';
 
@@ -1864,12 +1879,13 @@
       } catch { el.innerHTML = '<div class="trend-empty">Failed to load</div>'; }
     }
 
-    init();
-
-    // Register service worker for PWA / offline support
+    // Register service worker first so navigator.serviceWorker.ready resolves
+    // before initPushNotifications() tries to subscribe
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+
+    init();
   </script>
 </body>
 </html>
