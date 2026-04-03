@@ -623,6 +623,22 @@
     <div id="wf-list"><div class="empty">No words filtered. Chat is unfiltered.</div></div>
   </div>
 
+  <!-- Broadcast Announcement -->
+  <div class="content">
+    <div class="section-header">
+      <div class="section-title">📢 Announce to Viewers</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="announce-input" type="text" maxlength="300"
+        placeholder="Send a message to all viewers in chat…"
+        onkeydown="if(event.key==='Enter')sendAnnouncement()"
+        style="flex:1;background:#111;border:1px solid #2a2a2a;border-radius:7px;
+               color:#ccc;padding:8px 12px;font-size:.85em;outline:none">
+      <button class="btn-sm btn-extend" onclick="sendAnnouncement()">Send</button>
+    </div>
+    <div class="form-msg" id="announce-msg" style="margin-top:6px;min-height:1em;font-size:.8em"></div>
+  </div>
+
   <!-- Audit Log -->
   <div class="content">
     <div class="section-header">
@@ -1453,6 +1469,27 @@
           <span class="audit-details" title="${esc(details)}">${esc(details)}</span>
         </div>`;
       }).join('');
+    }
+
+    async function sendAnnouncement() {
+      const input = document.getElementById('announce-input');
+      const msg   = document.getElementById('announce-msg');
+      const text  = input.value.trim();
+      if (!text) return;
+      const res = await fetch('/api/admin/announce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        body: JSON.stringify({ text })
+      });
+      if (res.ok) {
+        input.value = '';
+        msg.style.color = '#44cc88';
+        msg.textContent = 'Sent to all viewers';
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      } else {
+        msg.style.color = '#ff6666';
+        msg.textContent = 'Failed to send';
+      }
     }
 
     function exportAuditCSV() {

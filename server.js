@@ -615,6 +615,15 @@ app.get('/api/admin/audit', requireAdmin, (req, res) => {
   res.json({ log: getAuditLog(200) });
 });
 
+// ─── Admin: broadcast announcement to all chat viewers ───────────────────────
+app.post('/api/admin/announce', requireAdmin, (req, res) => {
+  const text = String(req.body.text || '').trim().slice(0, 300);
+  if (!text) return res.status(400).json({ error: 'text required' });
+  broadcastAll({ type: 'system', text: `📢 ${text}`, time: Date.now() });
+  logAudit('admin', 'announce', { text });
+  res.json({ ok: true });
+});
+
 // ─── Admin: word filter ───────────────────────────────────────────────────────
 app.get('/api/admin/wordfilter', requireAdmin, (req, res) => {
   res.json({ words: getFilterWords() });
