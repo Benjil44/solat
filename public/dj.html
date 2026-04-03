@@ -1659,6 +1659,22 @@ function drawWaveformCursor(id, elapsed, duration) {
   }
   function inView(frac) { return frac >= viewStart && frac <= viewEnd; }
 
+  // Beat grid — draw thin tick marks at each beat position if BPM is known
+  if (deck._bpm && duration) {
+    const beatSec = 60 / deck._bpm;
+    const firstBeat = Math.floor(viewStart * duration / beatSec) * beatSec;
+    ctx.lineWidth = 1;
+    for (let t = firstBeat; t < viewEnd * duration; t += beatSec) {
+      const frac = t / duration;
+      if (!inView(frac)) continue;
+      const bx = fracToX(frac);
+      const isBar = Math.round(t / beatSec) % 4 === 0;
+      ctx.strokeStyle = isBar ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)';
+      ctx.beginPath(); ctx.moveTo(bx, isBar ? 0 : h * 0.25);
+      ctx.lineTo(bx, isBar ? h : h * 0.75); ctx.stroke();
+    }
+  }
+
   // Loop region — semi-transparent band between in/out points
   const loop = deck.loop;
   if (loop.in !== null && loop.out !== null && duration) {
@@ -2690,7 +2706,10 @@ async function drainLoadQueue() {
   isProcessing = true;
   while (loadQueue.length) {
     const f = loadQueue.shift();
-    const t = { name: f.name.replace(/\.[^.]+$/, ''), duration: 0, buffer: null, loading: true, loadPct: 0, _id: Math.random().toString(36).slice(2, 10) };
+    const trackName = f.name.replace(/\.[^.]+$/, '');
+    const isDupe = playlist.some(p => p.name === trackName && !p.loading);
+    if (isDupe) { toast(`"${trackName}" is already in the playlist`, true); continue; }
+    const t = { name: trackName, duration: 0, buffer: null, loading: true, loadPct: 0, _id: Math.random().toString(36).slice(2, 10) };
     playlist.push(t);
     renderPlaylist();
 
@@ -3633,6 +3652,29 @@ function showBPM(id, bpm) {
   // Clear synced state when BPM changes (track changed)
   const btn = document.getElementById('syncBtn' + id);
   if (btn) btn.classList.remove('synced');
+  checkBPMMismatch();
+}
+
+function checkBPMMismatch() {
+  const bpmA = decks.A._bpm, bpmB = decks.B._bpm;
+  const elA = document.getElementById('bpmA');
+  const elB = document.getElementById('bpmB');
+  if (!bpmA || !bpmB) {
+    elA.style.color = elB.style.color = '';
+    elA.title = elB.title = '';
+    return;
+  }
+  const diff = Math.abs(bpmA - bpmB);
+  const pct  = diff / Math.max(bpmA, bpmB);
+  if (pct > 0.02) { // >2% difference — flag both
+    const warn = 'rgba(255,136,0,1)';
+    elA.style.color = warn; elB.style.color = warn;
+    elA.title = elB.title = `BPM mismatch: ${bpmA} vs ${bpmB} (Δ${diff.toFixed(1)})`;
+  } else {
+    elA.style.color = elB.style.color = 'var(--green)';
+    elA.title = elB.title = `BPMs matched (${bpmA} ≈ ${bpmB})`;
+    setTimeout(() => { elA.style.color = elB.style.color = ''; }, 2000);
+  }
 }
 
 // ── Key Detection (Krumhansl-Schmuckler) ──────────────────────────────────────
