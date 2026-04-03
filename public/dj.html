@@ -189,7 +189,11 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* ── CHAT DRAWER (fixed right-side panel) ── */
 /* ── Page body wrapper ── */
 .page-body{display:flex;flex:1;min-height:0;overflow:hidden}
-.main-content{flex:1;overflow:auto;min-width:0;display:flex;flex-direction:column}
+.main-content{flex:1;overflow:hidden;min-width:0;display:flex;flex-direction:column}
+/* Bottom tabs fill all remaining height so nothing scrolls on the outer page */
+.bottom-tabs-wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.bottom-tabs-bar{flex-shrink:0}
+.btab-panel{flex:1;min-height:0;overflow-y:auto}
 /* ── Chat sidebar (inline, not overlay) ── */
 .dj-chat-drawer{
   width:0;overflow:hidden;flex-shrink:0;
@@ -348,7 +352,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   text-transform:uppercase;transition:.15s;white-space:nowrap}
 .btab:hover{color:#ccc}
 .btab.active{color:#fff;border-bottom-color:var(--accent)}
-.btab-panel{display:none;padding:10px 14px;max-height:280px;overflow-y:auto}
+.btab-panel{display:none;padding:10px 14px;overflow-y:auto}
 .btab-panel.active{display:block}
 
 /* ── Requests panel ── */
@@ -937,36 +941,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         </div>
       </div>
 
-      <!-- OBS Setup -->
-      <button class="obs-toggle" onclick="toggleOBSPanel()">🎛 OBS / External Source</button>
-      <div class="obs-panel" id="obsPanel">
-        <div class="obs-row">
-          <span class="obs-label">RTMP</span>
-          <span class="obs-val" id="obsRtmp"></span>
-          <button class="obs-copy" onclick="copyOBS('rtmp')">Copy</button>
-        </div>
-        <div class="obs-row">
-          <span class="obs-label">Key</span>
-          <span class="obs-val" id="obsKey"></span>
-          <button class="obs-copy" onclick="copyOBS('key')">Copy</button>
-        </div>
-      </div>
-
-      <!-- Keyboard Shortcuts -->
-      <button class="obs-toggle" onclick="toggleKBPanel()">⌨ Keyboard Shortcuts</button>
-      <div class="kb-panel" id="kbPanel">
-        <div class="kb-row"><span class="kb-key">Space</span><span class="kb-desc">Play / Pause active deck</span></div>
-        <div class="kb-row"><span class="kb-key">← →</span><span class="kb-desc">Nudge crossfader (5%)</span></div>
-        <div class="kb-row"><span class="kb-key">A</span><span class="kb-desc">Fade to Deck A</span></div>
-        <div class="kb-row"><span class="kb-key">B</span><span class="kb-desc">Fade to Deck B</span></div>
-        <div class="kb-row"><span class="kb-key">M</span><span class="kb-desc">Toggle monitor mute</span></div>
-        <div class="kb-row"><span class="kb-key">R</span><span class="kb-desc">Toggle mix recording</span></div>
-        <div class="kb-row"><span class="kb-key">1 2 3</span><span class="kb-desc">Set / jump to cue on active deck</span></div>
-        <div class="kb-row"><span class="kb-key">[</span><span class="kb-desc">Set loop in on active deck</span></div>
-        <div class="kb-row"><span class="kb-key">]</span><span class="kb-desc">Set loop out on active deck</span></div>
-        <div class="kb-row"><span class="kb-key">L</span><span class="kb-desc">Toggle loop on active deck</span></div>
-        <div class="kb-row"><span class="kb-key">Z X C V B N M ,</span><span class="kb-desc">Trigger sample pads 1–8</span></div>
-      </div>
     </div>
 
   </div>
@@ -1126,11 +1100,37 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <button class="btab active" id="btab-setlist"  onclick="switchBTab('setlist')">🎵 Setlist</button>
     <button class="btab"        id="btab-pads"     onclick="switchBTab('pads')">🎹 Pads</button>
     <button class="btab"        id="btab-queue"    onclick="switchBTab('queue')">
-      Play Queue <span id="queue-count" style="color:var(--accent)">0</span>
+      Queue <span id="queue-count" style="color:var(--accent)">0</span>
     </button>
     <button class="btab"        id="btab-requests" onclick="switchBTab('requests')">
       🎤 Requests <span class="req-panel-badge" id="req-panel-badge"></span>
     </button>
+    <button class="btab" onclick="toggleOBSPanel()" style="flex:0;padding:8px 12px" title="OBS / External Source">🎛</button>
+    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 12px" title="Keyboard Shortcuts">⌨</button>
+  </div>
+
+  <!-- OBS + Keyboard panels (shown above tab bar when toggled) -->
+  <div class="obs-panel" id="obsPanel" style="padding:8px 14px;border-bottom:1px solid var(--border)">
+    <div class="obs-row">
+      <span class="obs-label">RTMP</span>
+      <span class="obs-val" id="obsRtmp"></span>
+      <button class="obs-copy" onclick="copyOBS('rtmp')">Copy</button>
+    </div>
+    <div class="obs-row">
+      <span class="obs-label">Key</span>
+      <span class="obs-val" id="obsKey"></span>
+      <button class="obs-copy" onclick="copyOBS('key')">Copy</button>
+    </div>
+  </div>
+  <div class="kb-panel" id="kbPanel" style="padding:8px 14px;border-bottom:1px solid var(--border)">
+    <div class="kb-row"><span class="kb-key">Space</span><span class="kb-desc">Play / Pause active deck</span></div>
+    <div class="kb-row"><span class="kb-key">← →</span><span class="kb-desc">Nudge crossfader (5%)</span></div>
+    <div class="kb-row"><span class="kb-key">A / B</span><span class="kb-desc">Fade to Deck A / B</span></div>
+    <div class="kb-row"><span class="kb-key">M</span><span class="kb-desc">Toggle monitor mute</span></div>
+    <div class="kb-row"><span class="kb-key">R</span><span class="kb-desc">Toggle mix recording</span></div>
+    <div class="kb-row"><span class="kb-key">1 2 3</span><span class="kb-desc">Hotcues on active deck</span></div>
+    <div class="kb-row"><span class="kb-key">[ ]</span><span class="kb-desc">Loop in / out</span></div>
+    <div class="kb-row"><span class="kb-key">Z X C V B N M ,</span><span class="kb-desc">Sample pads 1–8</span></div>
   </div>
 
   <!-- Setlist tab -->
