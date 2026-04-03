@@ -695,6 +695,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div id="live-indicator">
       <div class="live-dot" id="live-dot"></div>
       <span id="live-text">OFF AIR</span>
+      <span id="live-timer" style="display:none;font-size:.72em;color:#ff6644;letter-spacing:1px;margin-left:6px;font-variant-numeric:tabular-nums">00:00:00</span>
     </div>
     <span id="viewer-count" title="Click to see who's watching" style="cursor:pointer" onclick="toggleViewerPanel()">0 viewers</span>
     <div id="viewer-panel">
@@ -1848,6 +1849,31 @@ function toggleMonitorMute() {
 let wsStream        = null;
 let recorder        = null;
 let isLive          = false;
+let _liveStart      = 0;
+let _liveTimerInt   = null;
+
+function startLiveTimer() {
+  _liveStart = Date.now();
+  const el = document.getElementById('live-timer');
+  el.style.display = 'inline';
+  clearInterval(_liveTimerInt);
+  _liveTimerInt = setInterval(() => {
+    const s = Math.floor((Date.now() - _liveStart) / 1000);
+    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+    const mm = String(Math.floor(s / 60) % 60).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    el.textContent = `${hh}:${mm}:${ss}`;
+  }, 1000);
+}
+
+function stopLiveTimer() {
+  clearInterval(_liveTimerInt);
+  _liveTimerInt = null;
+  _liveStart = 0;
+  const el = document.getElementById('live-timer');
+  el.style.display = 'none';
+  el.textContent = '00:00:00';
+}
 let broadcastStream = null;   // kept alive across reconnects
 let reconnectCount  = 0;
 const MAX_RECONNECT = 8;
@@ -1991,7 +2017,9 @@ function connectStreamWS() {
     document.getElementById('goLiveBtn').className = 'go-live-btn on';
     document.getElementById('live-dot').classList.add('on');
     document.getElementById('live-text').textContent = 'ON AIR';
-    toast(reconnectCount === 0 ? 'You are LIVE!' : 'Reconnected!');
+    const firstConnect = !_liveStart;
+    if (firstConnect) startLiveTimer();
+    toast(firstConnect ? 'You are LIVE!' : 'Reconnected!');
     if (reconnectCount === 0) startVotesPoll();
   };
 
@@ -2015,6 +2043,7 @@ function connectStreamWS() {
       document.getElementById('goLiveBtn').className = 'go-live-btn off';
       document.getElementById('live-dot').classList.remove('on');
       document.getElementById('live-text').textContent = 'OFF AIR';
+      stopLiveTimer();
     }
   };
 
@@ -2036,6 +2065,7 @@ function stopLive(silent = false) {
   document.getElementById('goLiveBtn').className = 'go-live-btn off';
   document.getElementById('live-dot').classList.remove('on');
   document.getElementById('live-text').textContent = 'OFF AIR';
+  stopLiveTimer();
   // Re-enable mode toggle
   document.getElementById('bcastModeRow').style.opacity = '';
   document.getElementById('bcastModeRow').style.pointerEvents = '';
