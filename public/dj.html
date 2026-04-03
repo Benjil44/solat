@@ -1820,9 +1820,16 @@ async function toggleCamera() {
       document.getElementById('camBtn').classList.add('active');
       document.getElementById('screenBtn').classList.remove('active');
       broadcastVideoTrack = cameraStream.getVideoTracks()[0];
-      _swapBroadcastVideo(broadcastVideoTrack);
-      if (isLive && broadcastMode === 'audio') toast('Camera preview on — switch to Audio+Video mode before going live to show viewers');
-      else toast('Camera on');
+      if (broadcastMode !== 'video') setBroadcastMode('video');
+      if (isLive) {
+        // Restart stream in video mode so viewers see the camera
+        toast('Switching to video — reconnecting…');
+        stopLive(true);
+        broadcastStream = null;
+        setTimeout(() => startLive(), 1200);
+      } else {
+        toast('Camera on — go live to share with viewers');
+      }
     } catch (e) { toast('Camera not available: ' + e.message, true); }
   }
 }
@@ -1848,7 +1855,6 @@ async function toggleScreen() {
       document.getElementById('screenBtn').classList.add('active');
       document.getElementById('camBtn').classList.remove('active');
       broadcastVideoTrack = screenStream.getVideoTracks()[0];
-      _swapBroadcastVideo(broadcastVideoTrack);
       screenStream.getVideoTracks()[0].onended = () => {
         screenStream = null; broadcastVideoTrack = null;
         document.getElementById('cam-preview').style.display = 'none';
@@ -1856,8 +1862,15 @@ async function toggleScreen() {
         document.getElementById('screenBtn').classList.remove('active');
         _swapBroadcastVideo(null);
       };
-      if (isLive && broadcastMode === 'audio') toast('Screen preview on — switch to Audio+Video mode before going live to show viewers');
-      else toast('Screen sharing on');
+      if (broadcastMode !== 'video') setBroadcastMode('video');
+      if (isLive) {
+        toast('Switching to video — reconnecting…');
+        stopLive(true);
+        broadcastStream = null;
+        setTimeout(() => startLive(), 1200);
+      } else {
+        toast('Screen sharing on — go live to share with viewers');
+      }
     } catch (e) { toast('Screen share failed: ' + e.message, true); }
   }
 }
@@ -1940,7 +1953,7 @@ let   STREAM_KEY = 'djlive'; // populated from status API on load
 let   broadcastMode = 'audio'; // 'audio' | 'video' — default audio-only
 
 function setBroadcastMode(mode) {
-  if (isLive) return; // can't change while live
+  if (isLive && broadcastMode === mode) return; // already this mode
   broadcastMode = mode;
   document.getElementById('modeAudioBtn').classList.toggle('active', mode === 'audio');
   document.getElementById('modeVideoBtn').classList.toggle('active', mode === 'video');
