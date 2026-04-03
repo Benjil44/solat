@@ -171,26 +171,24 @@ function startFFmpeg(mode = 'video') {
       recFile,
     ];
   } else {
+    // Use NVENC (GPU) if explicitly requested via env, otherwise libx264 (CPU, always available)
+    const useNvenc = (process.env.FFMPEG_ENCODER || '').toLowerCase() === 'nvenc';
+    const videoArgs = useNvenc
+      ? ['-c:v', 'h264_nvenc', '-preset', 'll', '-rc', 'cbr', '-bf', '0',
+         '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k', '-g', '50']
+      : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+         '-sc_threshold', '0', '-bf', '0',
+         '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k', '-g', '50'];
     args = [
       '-loglevel', 'warning',
       '-fflags', '+genpts+discardcorrupt',
       '-err_detect', 'ignore_err',
       '-f', 'webm',
       '-i', 'pipe:0',
-      // Video — NVIDIA GPU encoder (h264_nvenc). Falls back to libx264 if NVENC unavailable.
-      '-c:v', 'h264_nvenc',
-      '-preset', 'll',       // low-latency preset (supported on GTX+)
-      '-rc', 'cbr',          // constant bitrate — stable for live streaming
-      '-bf', '0',            // no B-frames (required for HLS segment independence)
-      '-b:v', '1500k', '-maxrate', '1800k', '-bufsize', '3600k',
-      '-g', '50',            // keyframe every 2s at 25fps
-      // Audio
+      ...videoArgs,
       '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k',
       ...hlsCommon,
-      // Recording output — copy already-encoded H264/AAC into MKV
-      '-c', 'copy',
-      '-f', 'matroska',
-      recFile,
+      '-c', 'copy', '-f', 'matroska', recFile,
     ];
   }
 
@@ -211,30 +209,6 @@ function startFFmpeg(mode = 'video') {
     ffmpegProc    = null;
     browserIsLive = false;
     stderrBuf     = '';
-
-    // NVENC not available — retry with software encoder (video mode only)
-    if (code !== 0 && wasLive && mode === 'video' && savedStderr.includes('nvenc') && djSocket && djSocket.readyState === 1) {
-      console.log('[DJ] NVENC unavailable — retrying with libx264 software encoder');
-      // Replace NVENC args with libx264
-      const swArgs = args.map((a, i) => {
-        if (a === 'h264_nvenc') return 'libx264';
-        if (a === 'll' && args[i-1] === '-preset') return 'ultrafast';
-        if (a === 'cbr' && args[i-1] === '-rc') return null;
-        if (a === '-rc') return null;
-        if (a === '0' && args[i-1] === '-bf') return null;
-        if (a === '-bf') return null;
-        return a;
-      }).filter(a => a !== null);
-      // Add libx264-specific flags
-      const g50idx = swArgs.indexOf('-g');
-      if (g50idx > -1) swArgs.splice(g50idx, 0, '-tune', 'zerolatency', '-sc_threshold', '0');
-      ffmpegProc = spawn(ffmpeg, swArgs, { windowsHide: true });
-      browserIsLive = true;
-      ffmpegProc.stderr.on('data', (d) => { const l = d.toString().trim(); if (l) console.log('[FFmpeg-sw]', l.slice(0,200)); });
-      ffmpegProc.on('close', (c) => { ffmpegProc = null; browserIsLive = false; console.log(`[FFmpeg-sw] exited (code ${c})`); });
-      ffmpegProc.stdin.on('error', () => {});
-      return;
-    }
 
     // Unexpected crash while DJ is still connected — tell the client so the button resets
     if (code !== 0 && wasLive && djSocket && djSocket.readyState === 1 /*OPEN*/) {
