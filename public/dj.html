@@ -74,10 +74,10 @@ canvas.waveform{display:block;width:100%;height:60px}
 /* ── Transport controls ── */
 .transport{display:flex;align-items:center;gap:8px}
 .t-btn{background:var(--panel);border:1px solid var(--border);color:#ccc;
-  width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:1.1em;
+  width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1em;
   display:flex;align-items:center;justify-content:center;transition:.15s}
 .t-btn:hover{border-color:var(--accent);color:var(--accent)}
-.t-btn.play-btn{width:44px;height:44px;font-size:1.3em;background:var(--accent);
+.t-btn.play-btn{width:38px;height:38px;font-size:1.2em;background:var(--accent);
   border-color:var(--accent);color:#fff}
 .t-btn.play-btn.playing{background:#ff6622}
 .time-display{font-size:.8em;color:var(--muted);margin-left:auto;letter-spacing:1px}
@@ -792,19 +792,17 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       </div>
     </div>
 
-    <!-- Volume -->
+    <!-- Volume + FX combined row -->
     <div class="vol-row">
       <span>VOL</span>
       <input type="range" id="volA" min="0" max="1.5" step="0.01" value="1"
         oninput="setVol('A',this.value)">
       <span class="vol-val" id="volValA">100%</span>
-    </div>
-
-    <!-- FX -->
-    <div class="fx-row">
-      <button class="fx-btn" id="fxEchoA" onclick="toggleFX('A','echo')">Echo</button>
-      <button class="fx-btn" id="fxLowpassA" onclick="toggleFX('A','lowpass')">Low Pass</button>
-      <button class="fx-btn" id="fxReverbA" onclick="toggleFX('A','reverb')">Reverb</button>
+      <div style="display:flex;gap:4px;margin-left:4px;flex-shrink:0">
+        <button class="fx-btn" id="fxEchoA" onclick="toggleFX('A','echo')">Echo</button>
+        <button class="fx-btn" id="fxLowpassA" onclick="toggleFX('A','lowpass')">LP</button>
+        <button class="fx-btn" id="fxReverbA" onclick="toggleFX('A','reverb')">Reverb</button>
+      </div>
     </div>
 
     <!-- Cue points -->
@@ -1024,17 +1022,17 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       </div>
     </div>
 
+    <!-- Volume + FX combined row -->
     <div class="vol-row">
       <span>VOL</span>
       <input type="range" id="volB" min="0" max="1.5" step="0.01" value="1"
         oninput="setVol('B',this.value)">
       <span class="vol-val" id="volValB">100%</span>
-    </div>
-
-    <div class="fx-row">
-      <button class="fx-btn" id="fxEchoB" onclick="toggleFX('B','echo')">Echo</button>
-      <button class="fx-btn" id="fxLowpassB" onclick="toggleFX('B','lowpass')">Low Pass</button>
-      <button class="fx-btn" id="fxReverbB" onclick="toggleFX('B','reverb')">Reverb</button>
+      <div style="display:flex;gap:4px;margin-left:4px;flex-shrink:0">
+        <button class="fx-btn" id="fxEchoB" onclick="toggleFX('B','echo')">Echo</button>
+        <button class="fx-btn" id="fxLowpassB" onclick="toggleFX('B','lowpass')">LP</button>
+        <button class="fx-btn" id="fxReverbB" onclick="toggleFX('B','reverb')">Reverb</button>
+      </div>
     </div>
 
     <!-- Cue points -->
@@ -2107,6 +2105,8 @@ function toggleDJChat() {
   if (chatDrawerOpen) {
     chatUnread = 0;
     updateChatBadge();
+    // Scroll back to top so decks stay visible when chat opens
+    document.querySelector('.main-content').scrollTop = 0;
     const el = document.getElementById('chat-messages');
     el.scrollTop = el.scrollHeight;
     setTimeout(() => document.getElementById('chat-input').focus(), 50);
