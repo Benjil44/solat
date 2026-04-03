@@ -353,7 +353,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .bottom-tabs-bar{display:flex;border-bottom:1px solid var(--border);background:var(--panel)}
 .btab{flex:1;padding:8px 6px;background:transparent;border:none;border-bottom:2px solid transparent;
   color:var(--muted);cursor:pointer;font-size:.75em;font-weight:bold;letter-spacing:.5px;
-  text-transform:uppercase;transition:.15s;white-space:nowrap}
+  text-transform:uppercase;transition:.15s;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.btab .material-symbols-outlined{font-size:16px;font-weight:300;text-transform:none;letter-spacing:0}
 .btab:hover{color:#ccc}
 .btab.active{color:#fff;border-bottom-color:var(--accent)}
 .btab-panel{display:none;padding:10px 14px;overflow-y:auto}
@@ -718,7 +720,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <div class="vp-list" id="vp-list"><div class="vp-empty">No viewers</div></div>
       <div class="vp-peak" id="vp-peak"></div>
     </div>
-    <button class="hdr-btn" id="chatToggleBtn" onclick="toggleDJChat()">💬 Chat<span class="chat-badge" id="chat-badge" style="display:none">0</span></button>
+    <button class="hdr-btn" id="chatToggleBtn" onclick="toggleDJChat()"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">chat</span> Chat<span class="chat-badge" id="chat-badge" style="display:none">0</span></button>
     <button class="hdr-btn admin-btn" onclick="window.location.href='/admin.html'">Admin</button>
   </div>
 </header>
@@ -905,12 +907,12 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       </div>
 
       <div class="track-name-row">
-        <span class="tn-label">👁 Track Names</span>
+        <span class="tn-label"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">visibility</span> Track Names</span>
         <button class="track-name-toggle active" id="trackNameToggle" onclick="toggleTrackName()">ON</button>
       </div>
       <div class="bcast-mode-row" id="bcastModeRow">
-        <button class="bcast-mode-btn active" id="modeAudioBtn" onclick="setBroadcastMode('audio')">🎵 Audio Only</button>
-        <button class="bcast-mode-btn" id="modeVideoBtn" onclick="setBroadcastMode('video')">📹 Audio + Video</button>
+        <button class="bcast-mode-btn active" id="modeAudioBtn" onclick="setBroadcastMode('audio')"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">music_note</span> Audio Only</button>
+        <button class="bcast-mode-btn" id="modeVideoBtn" onclick="setBroadcastMode('video')"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">videocam</span> Audio + Video</button>
       </div>
       <button class="go-live-btn off" id="goLiveBtn" onclick="toggleLive()">
         ● GO LIVE
@@ -921,15 +923,15 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <button onclick="toggleRecSched()" id="recSchedToggle"
           style="width:100%;background:var(--panel);border:none;color:#888;font-size:.75em;
                  padding:6px 10px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px">
-          <span id="recSchedArrow" style="transition:transform .2s">▶</span>
-          ⏺ Record &amp; Schedule
+          <span id="recSchedArrow" style="transition:transform .2s"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">chevron_right</span></span>
+          <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">radio_button_checked</span> Record &amp; Schedule
           <span id="recTimer" style="margin-left:auto;color:var(--accent);font-variant-numeric:tabular-nums"></span>
         </button>
         <div id="recSchedBody" style="display:none;padding:8px 10px;display:none;flex-direction:column;gap:7px;background:var(--bg)">
-          <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()">⏺ Record Mix</button>
+          <button class="record-btn" id="recordBtn" onclick="toggleMixRecord()"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">radio_button_checked</span> Record Mix</button>
           <div class="sched-row">
             <input type="datetime-local" id="schedInput" title="Schedule a go-live time for viewers">
-            <button class="title-btn" onclick="setSchedule()">📅 Set</button>
+            <button class="title-btn" onclick="setSchedule()"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">calendar_month</span> Set</button>
             <button class="title-btn" onclick="clearSched()" title="Clear schedule" style="padding:7px 10px">✕</button>
           </div>
           <label class="sched-repeat">
@@ -1066,17 +1068,17 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 <!-- ═══ BOTTOM TABS: Playlist / Setlist / Pads / Queue / Requests ═══ -->
 <div class="bottom-tabs-wrap">
   <div class="bottom-tabs-bar">
-    <button class="btab active" id="btab-playlist" onclick="switchBTab('playlist')">📋 Playlist</button>
-    <button class="btab"        id="btab-setlist"  onclick="switchBTab('setlist')">🎵 Setlist</button>
-    <button class="btab"        id="btab-pads"     onclick="switchBTab('pads')">🎹 Pads</button>
+    <button class="btab active" id="btab-playlist" onclick="switchBTab('playlist')"><span class="material-symbols-outlined">queue_music</span> Playlist</button>
+    <button class="btab"        id="btab-setlist"  onclick="switchBTab('setlist')"><span class="material-symbols-outlined">format_list_numbered</span> Setlist</button>
+    <button class="btab"        id="btab-pads"     onclick="switchBTab('pads')"><span class="material-symbols-outlined">grid_view</span> Pads</button>
     <button class="btab"        id="btab-queue"    onclick="switchBTab('queue')">
-      Queue <span id="queue-count" style="color:var(--accent)">0</span>
+      <span class="material-symbols-outlined">playlist_play</span> Queue <span id="queue-count" style="color:var(--accent)">0</span>
     </button>
     <button class="btab"        id="btab-requests" onclick="switchBTab('requests')">
-      🎤 Requests <span class="req-panel-badge" id="req-panel-badge"></span>
+      <span class="material-symbols-outlined">mic</span> Requests <span class="req-panel-badge" id="req-panel-badge"></span>
     </button>
-    <button class="btab" onclick="toggleOBSPanel()" style="flex:0;padding:8px 12px" title="OBS / External Source">🎛</button>
-    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 12px" title="Keyboard Shortcuts">⌨</button>
+    <button class="btab" onclick="toggleOBSPanel()" style="flex:0;padding:8px 12px" title="OBS / External Source"><span class="material-symbols-outlined">tune</span></button>
+    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 12px" title="Keyboard Shortcuts"><span class="material-symbols-outlined">keyboard</span></button>
   </div>
 
   <!-- OBS + Keyboard panels (shown above tab bar when toggled) -->
@@ -1137,7 +1139,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   <!-- Setlist tab -->
   <div class="btab-panel" id="btabp-setlist">
     <div style="display:flex;align-items:center;justify-content:flex-end;padding:4px 0 8px">
-      <button class="setlist-dl" onclick="downloadSetlist()">⬇ Download .txt</button>
+      <button class="setlist-dl" onclick="downloadSetlist()"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">download</span> Download .txt</button>
     </div>
     <div id="setlist-items">
       <div class="setlist-empty">No tracks played yet — set a title to start the setlist</div>
@@ -1857,7 +1859,7 @@ function toggleMonitorMute() {
   monitorMuted = !monitorMuted;
   monitorGain.gain.value = monitorMuted ? 0 : 1;
   const btn = document.getElementById('monitorMuteBtn');
-  btn.textContent = monitorMuted ? '🔇 Monitor' : '🔊 Monitor';
+  btn.querySelector('.material-symbols-outlined').textContent = monitorMuted ? 'headphones_off' : 'headphones';
   btn.classList.toggle('active', monitorMuted);
   toast(monitorMuted ? 'Monitor muted (stream still live)' : 'Monitor unmuted');
 }
@@ -2243,7 +2245,7 @@ function startMixRecord() {
   mixRecorder.start(1000);
   mixStartTime = Date.now();
   document.getElementById('recordBtn').classList.add('rec');
-  document.getElementById('recordBtn').textContent = '⏹ Stop Recording';
+  document.getElementById('recordBtn').innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">stop_circle</span> Stop Recording';
   mixTimerInt = setInterval(updateRecTimer, 1000);
   updateRecTimer();
   toast('Recording started');
@@ -2253,7 +2255,7 @@ function stopMixRecord() {
   if (mixRecorder && mixRecorder.state !== 'inactive') mixRecorder.stop();
   clearInterval(mixTimerInt);
   document.getElementById('recordBtn').classList.remove('rec');
-  document.getElementById('recordBtn').textContent = '⏺ Record Mix';
+  document.getElementById('recordBtn').innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">radio_button_checked</span> Record Mix';
   document.getElementById('recTimer').textContent = '';
 }
 
