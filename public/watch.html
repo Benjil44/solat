@@ -754,6 +754,11 @@
         updateBellBtn(_pushSub != null);
         document.getElementById('bell-btn').style.display = 'inline-block';
         window._vapidPublicKey = publicKey;
+        // If permission already granted (existing sub), ensure nudge stays hidden
+        if (_pushSub || Notification.permission === 'granted') {
+          const nudge = document.getElementById('push-nudge');
+          if (nudge) nudge.style.display = 'none';
+        }
         // Load initial prefs so checkboxes reflect saved state immediately
         if (_pushSub) {
           fetch('/api/push/prefs').then(r => r.ok ? r.json() : null).then(p => {
@@ -779,6 +784,7 @@
           updateBellBtn(false);
         } else {
           // Subscribe
+          _pushSubscribing = true;
           const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(window._vapidPublicKey)
@@ -789,9 +795,16 @@
             body: JSON.stringify(sub)
           });
           _pushSub = sub;
+          _pushSubscribing = false;
           updateBellBtn(true);
+          // Hide nudge — user has now subscribed
+          const nudge = document.getElementById('push-nudge');
+          if (nudge) nudge.style.display = 'none';
         }
-      } catch (e) { console.warn('Push toggle failed:', e); }
+      } catch (e) {
+        _pushSubscribing = false;
+        console.warn('Push toggle failed:', e);
+      }
     }
 
     function updateBellBtn(on) {
@@ -1277,9 +1290,13 @@
     }
 
     // ── Push nudge — shown on offline overlay if no subscription ──────────────
+    let _pushSubscribing = false; // true while permission dialog is open
+
     function maybeShowPushNudge() {
-      if (!window._vapidPublicKey) return; // push not configured
-      if (_pushSub) return;                // already subscribed
+      if (!window._vapidPublicKey) return;       // push not configured
+      if (_pushSub) return;                      // already subscribed
+      if (_pushSubscribing) return;              // permission dialog in progress
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') return; // already allowed
       const nudge = document.getElementById('push-nudge');
       if (nudge) nudge.style.display = 'flex';
     }

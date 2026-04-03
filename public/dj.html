@@ -582,6 +582,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 @keyframes deck-flash{0%{background:rgba(68,255,136,.18)}100%{background:var(--card)}}
 .deck.flash-load{animation:deck-flash .55s ease-out}
 .pl-item.loading{pointer-events:none;border-color:#2a1500 !important}
+.pl-item.no-audio .pl-name{color:#666}
+.pl-no-audio{color:#ff8800;font-size:.8em;flex-shrink:0;cursor:default}
 .pl-progress{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;
   background:linear-gradient(90deg,rgba(255,80,0,.4) 0%,rgba(255,80,0,.12) 100%);
   transition:width .1s linear;pointer-events:none;z-index:-1}
@@ -2898,6 +2900,7 @@ function removeFromPlaylist(idx) {
 function loadPlaylistTrack(idx, deckId) {
   const t = playlist[idx];
   if (!t) return;
+  if (!t.buffer) { toast('Drop the audio file for "' + t.name.slice(0, 40) + '" onto this deck to reload it', true); return; }
   const deck = decks[deckId];
   if (deck.playing) stopDeck(deckId);
   deck.buffer      = t.buffer;
@@ -2938,6 +2941,10 @@ function plItemDblClick(e, idx) {
 
   const t = playlist[idx];
   if (!t || t.loading) return;
+  if (!t.buffer) {
+    toast('Drop the audio file for "' + t.name.slice(0, 40) + '" onto a deck to reload it', true);
+    return;
+  }
 
   const aPlaying = decks['A'].playing;
   const bPlaying = decks['B'].playing;
@@ -3005,7 +3012,8 @@ function renderPlaylist() {
     const trackId   = t._id || '';
     const votes     = trackId ? (upcomingVotes[trackId] || 0) : 0;
     const isTopVoted = votes >= 3;
-    let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '');
+    const noAudio = !t.buffer;
+    let cls = 'pl-item' + (isCurrent ? ' active' : isNext ? ' next-up' : '') + (noAudio ? ' no-audio' : '');
     const voteBadge = (trackId && votes > 0)
       ? `<span class="pl-votes show${isTopVoted ? ' top-voted' : ''}" onclick="prioritizeTrack('${trackId}',event)" title="${votes} viewer vote${votes>1?'s':''}. Click to play next.">👍${votes}</span>`
       : `<span class="pl-votes" data-id="${trackId}"></span>`;
@@ -3019,8 +3027,8 @@ function renderPlaylist() {
       <span class="pl-handle" title="Drag to reorder">⠿⠿</span>
       <span class="pl-num">${isCurrent ? '▶' : i + 1}</span>
       <span class="pl-name" title="${esc(t.name)}">${esc(t.name)}</span>
-      ${voteBadge}
-      <span class="pl-dur">${fmtTime(t.duration)}</span>
+      ${noAudio ? `<span class="pl-no-audio" title="No audio — drop the file onto a deck to reload">⚠</span>` : voteBadge}
+      <span class="pl-dur">${t.duration ? fmtTime(t.duration) : '—'}</span>
       <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'A')">→A</button>
       <button class="pl-deck-btn" onclick="loadPlaylistTrack(${i},'B')">→B</button>
       <button class="pl-del" onclick="removeFromPlaylist(${i})">✕</button>
@@ -3192,27 +3200,34 @@ function toggleAutoDJ() {
 
 function startAutoDJ() {
   if (!playlist.length) { toast('Add tracks to the playlist first', true); return; }
+  const firstReady = playlist.findIndex(t => t.buffer && !t.loading);
+  if (firstReady < 0) {
+    toast('No audio loaded — drop files onto the decks or add tracks first', true);
+    return;
+  }
   if (audioCtx.state === 'suspended') audioCtx.resume();
 
   autoDJActive        = true;
-  autoDJCurrentIdx    = 0;
+  autoDJCurrentIdx    = firstReady;
   autoDJActiveDeck    = 'A';
   autoDJTransitioning = false;
 
   document.getElementById('autoDJBtn').classList.add('on');
   document.getElementById('autoDJBtn').textContent = '⏹ STOP AUTO DJ';
 
-  // Load current track on A, set crossfader full-left
-  loadPlaylistTrack(0, 'A');
+  // Load first ready track on A, set crossfader full-left
+  loadPlaylistTrack(firstReady, 'A');
   document.getElementById('crossfader').value = 0;
   setCrossfader(0);
 
-  // Pre-load next track on B so it's ready when the crossfade begins
-  if (playlist.length > 1) loadPlaylistTrack(1, 'B');
+  // Pre-load next ready track on B so it's ready when the crossfade begins
+  const nextReady = playlist.findIndex((t, i) => i > firstReady && t.buffer && !t.loading);
+  if (nextReady >= 0) loadPlaylistTrack(nextReady, 'B');
 
   setTimeout(() => {
     playDeck('A', 0);
-    toast('Auto DJ started — ' + playlist.length + ' tracks');
+    const ready = playlist.filter(t => t.buffer && !t.loading).length;
+    toast('Auto DJ started — ' + ready + ' track' + (ready !== 1 ? 's' : ''));
     renderPlaylist();
   }, 80);
 }
@@ -3250,7 +3265,9 @@ function autoDJTick() {
       startAutoDJTransitionFromQueue(_djQueue[0]);
       return;
     }
-    const nextIdx = autoDJCurrentIdx + 1;
+    // Find next track that actually has audio loaded
+    let nextIdx = autoDJCurrentIdx + 1;
+    while (nextIdx < playlist.length && !playlist[nextIdx].buffer) nextIdx++;
     if (nextIdx >= playlist.length) {
       if (remaining <= 0.2) stopAutoDJ();
       return;
@@ -3286,8 +3303,9 @@ function startAutoDJTransition(nextIdx) {
       setCfAutoStatus('');
       renderPlaylist();
 
-      // Pre-load the NEXT track on the now-free deck
-      const preloadIdx = nextIdx + 1;
+      // Pre-load the NEXT ready track on the now-free deck
+      let preloadIdx = nextIdx + 1;
+      while (preloadIdx < playlist.length && !playlist[preloadIdx].buffer) preloadIdx++;
       if (preloadIdx < playlist.length) loadPlaylistTrack(preloadIdx, fromDeck);
 
       const el = document.getElementById('pl-item-' + nextIdx);
