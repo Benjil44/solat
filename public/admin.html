@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#ff4500">
   <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
   <title>DJ Admin Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -431,6 +432,27 @@
     .audit-actor  { color: #ff8844; min-width: 55px; flex-shrink: 0; }
     .audit-action { color: #ddd; min-width: 140px; flex-shrink: 0; }
     .audit-details { color: #888; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Section nav ── */
+    #section-nav {
+      position: sticky; top: 0; z-index: 50;
+      background: #0d0d0d; border-bottom: 1px solid #1e1e1e;
+      padding: 0 24px; display: flex; gap: 2px; overflow-x: auto;
+      scrollbar-width: none;
+    }
+    #section-nav::-webkit-scrollbar { display: none; }
+    .snav-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 8px 12px; background: transparent; border: none;
+      border-bottom: 2px solid transparent; color: #555;
+      font-size: .72em; font-weight: bold; letter-spacing: .5px;
+      text-transform: uppercase; cursor: pointer; white-space: nowrap;
+      transition: color .15s, border-color .15s; text-decoration: none;
+    }
+    .snav-btn:hover { color: #ccc; border-bottom-color: #444; }
+    .snav-btn .material-symbols-outlined { font-size: 15px; }
+    /* Material icon base for admin */
+    .material-symbols-outlined { font-size: 16px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -471,8 +493,25 @@
     </div>
   </div>
 
+  <!-- Section nav -->
+  <nav id="section-nav">
+    <a class="snav-btn" href="#sec-stats"><span class="material-symbols-outlined">bar_chart</span>Stats</a>
+    <a class="snav-btn" href="#sec-key"><span class="material-symbols-outlined">vpn_key</span>Stream Key</a>
+    <a class="snav-btn" href="#sec-users"><span class="material-symbols-outlined">group</span>Users</a>
+    <a class="snav-btn" href="#sec-invites"><span class="material-symbols-outlined">mail</span>Invites</a>
+    <a class="snav-btn" href="#sec-recordings"><span class="material-symbols-outlined">mic</span>Recordings</a>
+    <a class="snav-btn" href="#sec-sessions"><span class="material-symbols-outlined">history</span>Sessions</a>
+    <a class="snav-btn" href="#sec-corrections"><span class="material-symbols-outlined">spellcheck</span>Corrections</a>
+    <a class="snav-btn" href="#sec-musicdb"><span class="material-symbols-outlined">library_music</span>Music DB</a>
+    <a class="snav-btn" href="#sec-muted"><span class="material-symbols-outlined">block</span>Muted</a>
+    <a class="snav-btn" href="#sec-wordfilter"><span class="material-symbols-outlined">filter_alt</span>Word Filter</a>
+    <a class="snav-btn" href="#sec-announce"><span class="material-symbols-outlined">campaign</span>Announce</a>
+    <a class="snav-btn" href="#sec-requests"><span class="material-symbols-outlined">queue_music</span>Requests</a>
+    <a class="snav-btn" href="#sec-audit"><span class="material-symbols-outlined">fact_check</span>Audit</a>
+  </nav>
+
   <!-- Live Session Stats -->
-  <div class="content">
+  <div class="content" id="sec-stats">
     <div class="section-title">Live Session Stats</div>
     <div class="stats" style="margin-bottom:0">
       <div class="stat-card"><div class="val" id="ls-viewers">—</div><div class="lbl">Viewers Now</div></div>
@@ -487,7 +526,7 @@
   </div>
 
   <!-- Stream Key -->
-  <div class="content">
+  <div class="content" id="sec-key">
     <div class="section-header">
       <div class="section-title" style="margin:0">Stream Key</div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -504,7 +543,7 @@
   </div>
 
   <!-- User list -->
-  <div class="content">
+  <div class="content" id="sec-users">
     <div class="section-title">Users</div>
     <input type="text" class="user-search" id="user-search" placeholder="Filter by username…" oninput="renderUsers()">
     <div class="table-wrap">
@@ -527,7 +566,7 @@
   </div>
 
   <!-- Invite Codes -->
-  <div class="content">
+  <div class="content" id="sec-invites">
     <div class="section-header">
       <div class="section-title" style="margin:0">Invite Codes</div>
       <span id="invite-mode-badge" class="invite-mode-badge badge-invite-off">Open Registration</span>
@@ -542,7 +581,7 @@
   </div>
 
   <!-- Recordings -->
-  <div class="content">
+  <div class="content" id="sec-recordings">
     <div class="section-header">
       <div class="section-title">Recordings</div>
       <button class="btn-sm" onclick="loadRecordings()">⟳ Refresh</button>
@@ -557,7 +596,7 @@
   </div>
 
   <!-- Session History -->
-  <div class="content">
+  <div class="content" id="sec-sessions">
     <div class="section-header">
       <div class="section-title">Session History</div>
       <button class="btn-sm" onclick="loadSessionHistory()">⟳ Refresh</button>
@@ -566,7 +605,7 @@
   </div>
 
   <!-- Music Corrections -->
-  <div class="content">
+  <div class="content" id="sec-corrections">
     <div class="section-header">
       <div class="section-title">Music Corrections</div>
       <div style="display:flex;gap:8px">
@@ -580,7 +619,7 @@
   </div>
 
   <!-- Music DB Management -->
-  <div class="content">
+  <div class="content" id="sec-musicdb">
     <div class="section-header">
       <div class="section-title">Music DB</div>
       <button class="btn-sm" onclick="window.open('/api/admin/music-db/export.csv','_blank')">⬇ Export CSV</button>
@@ -601,7 +640,7 @@
   </div>
 
   <!-- Muted Users -->
-  <div class="content">
+  <div class="content" id="sec-muted">
     <div class="section-header">
       <div class="section-title">Muted Users</div>
       <button class="btn-sm" onclick="loadMutedUsers()">⟳ Refresh</button>
@@ -610,7 +649,7 @@
   </div>
 
   <!-- Word Filter -->
-  <div class="content">
+  <div class="content" id="sec-wordfilter">
     <div class="section-header">
       <div class="section-title">Word Filter</div>
       <button class="btn-sm" onclick="loadWordFilter()">⟳ Refresh</button>
@@ -624,7 +663,7 @@
   </div>
 
   <!-- Broadcast Announcement -->
-  <div class="content">
+  <div class="content" id="sec-announce">
     <div class="section-header">
       <div class="section-title">📢 Announce to Viewers</div>
     </div>
@@ -639,8 +678,8 @@
     <div class="form-msg" id="announce-msg" style="margin-top:6px;min-height:1em;font-size:.8em"></div>
   </div>
 
-  <!-- Audit Log -->
-  <div class="content">
+  <!-- Request History -->
+  <div class="content" id="sec-requests">
     <div class="section-header">
       <div class="section-title">Request History</div>
       <a class="btn-sm" href="/api/admin/requests/export.csv" download="requests.csv">⬇ Export CSV</a>
@@ -648,7 +687,7 @@
     <div id="req-history-list"><div class="empty">No requests in this session</div></div>
   </div>
 
-  <div class="content">
+  <div class="content" id="sec-audit">
     <div class="section-header">
       <div class="section-title">Audit Log</div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
