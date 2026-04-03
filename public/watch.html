@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#ff4500">
   <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
   <title>DJ Live Stream</title>
   <script src="/hls.min.js"></script>
   <style>
@@ -125,13 +126,8 @@
     }
 
     /* View-toggle button (video ↔ artwork) */
-    #view-toggle-btn {
-      background:transparent; border:1px solid #444; color:#ccc;
-      padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em;
-      display:none;
-    }
-    #view-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
-    #view-toggle-btn.show { display:inline-block; }
+    #view-toggle-btn { display:none; }
+    #view-toggle-btn.show { display:inline-flex; }
 
     /* overlay (offline / buffering / tap-to-play) */
     #overlay { position:absolute; inset:0; display:flex; flex-direction:column;
@@ -190,12 +186,7 @@
     #vol-label { font-size:.8em; color:#888; }
     input[type=range] { accent-color:var(--accent); cursor:pointer; }
     #volume { width:100px; }
-    #fullscreen-btn { margin-left:auto; background:transparent; border:1px solid #444;
-      color:#ccc; padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em; }
-    #fullscreen-btn:hover { border-color:var(--accent); color:var(--accent); }
-    #chat-toggle-btn { background:transparent; border:1px solid #444; color:#ccc;
-      padding:5px 12px; border-radius:6px; cursor:pointer; font-size:.82em; }
-    #chat-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
+    #fullscreen-btn { margin-left:auto; }
     #chat-toggle-btn.active { border-color:var(--accent); color:var(--accent); background:#1a0800; }
 
     /* ── Chat/Request panel ── */
@@ -391,8 +382,7 @@
       #volume { flex:1; width:auto; min-width:0; }
       #fullscreen-btn { display:none; }
       /* Shorten chat toggle label */
-      #chat-toggle-btn { font-size:0; padding:5px 10px; }
-      #chat-toggle-btn::before { content:'💬'; font-size:14px; }
+      #chat-toggle-btn { padding:5px 8px; }
 
       /* Chat panel — full overlay */
       #main { position:relative; overflow:hidden; }
@@ -404,6 +394,13 @@
     }
     /* Hide mobile close button on desktop */
     #panel-mobile-close { display:none; }
+    /* Material icon buttons */
+    .icon-btn { display:inline-flex;align-items:center;justify-content:center;
+      background:transparent;border:1px solid #444;color:#ccc;padding:5px 8px;
+      border-radius:6px;cursor:pointer;font-size:.82em;gap:5px;transition:.15s;line-height:1 }
+    .icon-btn:hover { border-color:var(--accent);color:var(--accent) }
+    .icon-btn.active { border-color:var(--accent);color:var(--accent);background:#1a0800 }
+    .icon-btn .material-symbols-outlined { font-size:18px;line-height:1 }
   </style>
 </head>
 <body>
@@ -436,12 +433,12 @@
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
-      <button class="logout-btn" id="clip-btn" onclick="saveClip()"
-              title="Save this moment to your profile" style="display:none">📌</button>
-      <button class="logout-btn" id="pip-btn" onclick="togglePiP()"
-              title="Picture-in-Picture" style="display:none">⛶</button>
-      <button class="logout-btn" id="bell-btn" onclick="togglePushNotify()"
-              title="Notify me when DJ goes live" style="display:none">🔕</button>
+      <button class="icon-btn" id="clip-btn" onclick="saveClip()"
+              title="Save this moment to your profile" style="display:none"><span class="material-symbols-outlined">bookmark_add</span></button>
+      <button class="icon-btn" id="pip-btn" onclick="togglePiP()"
+              title="Picture-in-Picture" style="display:none"><span class="material-symbols-outlined">picture_in_picture_alt</span></button>
+      <button class="icon-btn" id="bell-btn" onclick="togglePushNotify()"
+              title="Notify me when DJ goes live" style="display:none"><span class="material-symbols-outlined">notifications_off</span></button>
       <div style="position:relative">
         <button id="push-prefs-btn" onclick="togglePushPrefsPanel()" title="Notification preferences">⚙</button>
         <div id="push-prefs-panel">
@@ -461,8 +458,8 @@
           <button class="ppref-unsub" onclick="togglePushNotify();togglePushPrefsPanel()">Unsubscribe from all</button>
         </div>
       </div>
-      <button class="logout-btn" onclick="showChangePwd()">🔑</button>
-      <button class="logout-btn" onclick="doLogout()">Logout</button>
+      <button class="icon-btn" onclick="showChangePwd()" title="Change password"><span class="material-symbols-outlined">lock</span></button>
+      <button class="icon-btn" onclick="doLogout()" title="Logout"><span class="material-symbols-outlined">logout</span></button>
     </div>
   </div>
 
@@ -520,9 +517,9 @@
         <span id="vol-label">Vol</span>
         <input type="range" id="volume" min="0" max="1" step="0.05" value="0.8"
           oninput="setVolume(this.value)">
-        <button id="view-toggle-btn" onclick="toggleView()">🎵 Artwork</button>
-        <button id="chat-toggle-btn" onclick="toggleChat()">💬 Chat/Requests</button>
-        <button id="fullscreen-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        <button id="view-toggle-btn" class="icon-btn" onclick="toggleView()"><span class="material-symbols-outlined">album</span></button>
+        <button id="chat-toggle-btn" class="icon-btn" onclick="toggleChat()" title="Chat &amp; Requests"><span class="material-symbols-outlined">chat</span></button>
+        <button id="fullscreen-btn" class="icon-btn" onclick="toggleFullscreen()" title="Fullscreen"><span class="material-symbols-outlined">fullscreen</span></button>
       </div>
     </div>
 
@@ -774,7 +771,7 @@
       const btn     = document.getElementById('bell-btn');
       const prefBtn = document.getElementById('push-prefs-btn');
       if (!btn) return;
-      btn.textContent = on ? '🔔' : '🔕';
+      btn.querySelector('.material-symbols-outlined').textContent = on ? 'notifications_active' : 'notifications_off';
       btn.title = on ? 'Notifications ON — click to disable' : 'Notify me when DJ goes live';
       if (prefBtn) prefBtn.style.display = on ? 'inline-block' : 'none';
       if (!on) document.getElementById('push-prefs-panel').classList.remove('show');
@@ -1263,11 +1260,11 @@
       if (videoMode) {
         video.classList.add('visible');
         nowPlaying.classList.add('hidden');
-        document.getElementById('view-toggle-btn').textContent = '🎵 Artwork';
+        document.getElementById('view-toggle-btn').querySelector('.material-symbols-outlined').textContent = 'album';
       } else {
         video.classList.remove('visible');
         nowPlaying.classList.remove('hidden');
-        document.getElementById('view-toggle-btn').textContent = '📺 Video';
+        document.getElementById('view-toggle-btn').querySelector('.material-symbols-outlined').textContent = 'tv';
       }
     }
 
@@ -1499,7 +1496,7 @@
 
     // Clear chat notification dot when chat panel is opened
     document.getElementById('chat-toggle-btn').addEventListener('click', () => {
-      document.getElementById('chat-toggle-btn').textContent = '💬 Chat/Requests';
+      // icon stays the same — no text update needed
     });
 
     function esc(s) {
