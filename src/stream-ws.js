@@ -194,7 +194,7 @@ function startFFmpeg(mode = 'video') {
     ];
   }
 
-  ffmpegProc = spawn(ffmpeg, args);
+  ffmpegProc = spawn(ffmpeg, args, { windowsHide: true });
   browserIsLive = true;
   console.log('[REC] Recording to:', recFile);
 
@@ -228,7 +228,7 @@ function startFFmpeg(mode = 'video') {
       // Add libx264-specific flags
       const g50idx = swArgs.indexOf('-g');
       if (g50idx > -1) swArgs.splice(g50idx, 0, '-tune', 'zerolatency', '-sc_threshold', '0');
-      ffmpegProc = spawn(ffmpeg, swArgs);
+      ffmpegProc = spawn(ffmpeg, swArgs, { windowsHide: true });
       browserIsLive = true;
       ffmpegProc.stderr.on('data', (d) => { const l = d.toString().trim(); if (l) console.log('[FFmpeg-sw]', l.slice(0,200)); });
       ffmpegProc.on('close', (c) => { ffmpegProc = null; browserIsLive = false; console.log(`[FFmpeg-sw] exited (code ${c})`); });
