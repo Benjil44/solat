@@ -31,8 +31,8 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 .hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ── Main layout ── */
-.studio{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;grid-template-rows:auto auto auto;
-  gap:10px;padding:10px;overflow:auto}
+.studio{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;grid-template-rows:auto auto;
+  gap:10px;padding:10px;overflow:auto;align-items:start}
 
 /* ── Deck card ── */
 .deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;
@@ -110,7 +110,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   transition:height 0.05s;border-radius:2px}
 
 /* ── CENTER COLUMN ── */
-.center-col{display:flex;flex-direction:column;gap:10px}
+.center-col{display:flex;flex-direction:column;gap:10px;align-self:start}
 
 /* Crossfader */
 .crossfader-card{background:var(--card);border:1px solid var(--border);
@@ -507,6 +507,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* ── Playlist Panel ── */
 .playlist-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:14px;margin:0 10px 10px;display:flex;flex-direction:column;gap:10px}
+/* Inside studio grid: span all 3 columns */
+.studio > .playlist-panel{grid-column:1/-1;margin:0}
 .pl-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pl-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
   text-transform:uppercase;white-space:nowrap}
@@ -570,9 +572,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* Tablet ≤1000px: 2-col decks, center spans full width on top */
 @media(max-width:1000px){
   .studio{grid-template-columns:1fr 1fr}
-  .center-col{
-    grid-column:1/-1;grid-row:1
-  }
+  .center-col{grid-column:1/-1;grid-row:1}
+  .studio > .playlist-panel{grid-column:1/-1}
   /* Cap viz canvas height so it doesn't fill the full viewport width */
   #viz-canvas,#cam-preview{max-height:200px;object-fit:cover}
   /* Constrain crossfader card width and center it */
@@ -657,7 +658,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .obs-toggle{font-size:.75em;padding:6px}
 
   /* Playlist */
-  .playlist-panel{margin:0 8px 8px;padding:10px}
+  .playlist-panel{margin:0;padding:10px}
+  .studio > .playlist-panel{margin:0}
   #playlist-tracks{max-height:140px}
   .pl-deck-btn{display:none}
   .pl-header{gap:5px}
@@ -1065,8 +1067,6 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   </div>
 
 
-</div><!-- /studio -->
-
 <!-- ═══ PLAYLIST + AUTO DJ ═══ -->
 <div class="playlist-panel" id="playlist-panel"
   ondragover="plPanelDragOver(event)"
@@ -1095,6 +1095,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <div class="pl-empty">No tracks — click "+ Add Tracks" or drop audio files here</div>
   </div>
 </div><!-- /playlist-panel -->
+
+</div><!-- /studio -->
 
 <!-- ═══ SETLIST ═══ -->
 <div class="setlist-card">
