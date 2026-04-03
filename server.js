@@ -235,6 +235,8 @@ app.get('/api/live', (req, res) => {
     nextCover:     nextTrackCover || null,
     scheduledAt:   sched ? sched.scheduledAt : null,
     upcoming:      upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 })),
+    setlist:       getSetlist(),
+    sessionStart:  getSessionStartTime(),
   });
 });
 
@@ -250,6 +252,8 @@ app.get('/api/status', requireAuth, (req, res) => {
     nextTrack:     nextTrackTitle || null,
     nextCover:     nextTrackCover || null,
     upcoming:      upcomingTracks.map(t => ({ id: t.id, title: t.title, votes: trackVotes.get(t.id) || 0 })),
+    setlist:       getSetlist(),
+    sessionStart:  getSessionStartTime(),
   });
 });
 

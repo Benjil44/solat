@@ -322,6 +322,12 @@
     /* Upcoming pane */
     #upcoming-list { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
     .upcoming-empty { padding:20px; text-align:center; color:#444; font-size:.82em; }
+    .played-item { display:flex; align-items:baseline; gap:8px; padding:7px 10px;
+      border-bottom:1px solid #111; font-size:.82em; }
+    .played-num  { color:#333; font-size:.75em; min-width:18px; text-align:right; flex-shrink:0; }
+    .played-title{ flex:1; color:#ccc; word-break:break-word; }
+    .played-time { color:#444; font-size:.75em; flex-shrink:0; white-space:nowrap; }
+    .played-item:last-child { border-bottom:none; }
     .up-item { display:flex; align-items:center; gap:8px; padding:7px 10px;
       background:#0d0d0d; border:1px solid #1a1a1a; border-radius:7px; }
     .up-num { font-size:.7em; color:#555; min-width:18px; text-align:right; font-weight:bold; flex-shrink:0; }
@@ -556,6 +562,7 @@
         <button class="panel-tab"        id="tab-btn-upcoming" onclick="switchTab('upcoming')">
           📋 Up Next<span class="tab-notif" id="upcoming-notif"></span>
         </button>
+        <button class="panel-tab"        id="tab-btn-played"   onclick="switchTab('played')">🎶 Played</button>
       </div>
 
       <!-- Chat pane -->
@@ -601,6 +608,11 @@
       <div class="tab-pane" id="pane-upcoming">
         <div id="upcoming-list"><div class="upcoming-empty">No upcoming tracks shared yet</div></div>
       </div>
+
+      <!-- Played this session tab -->
+      <div class="tab-pane" id="pane-played">
+        <div id="played-list"><div class="trend-empty">Nothing played yet this session</div></div>
+      </div>
     </div>
 
   </div>
@@ -623,6 +635,7 @@
     let activeTab   = 'chat';
     let _requests   = [];
     let _upcomingTracks = [];   // [{id, title, votes}]
+    let _setlist    = [];       // [{title, time}] — tracks played this session
     let _myUpvote       = null; // trackId the current user has voted for
 
     // ── Volume persistence ────────────────────────────────────
@@ -898,6 +911,8 @@
         updateNextTrack(d.nextTrack || null);
         // Load upcoming playlist from initial poll (WS will keep it updated after that)
         if (d.upcoming) setUpcomingTracks(d.upcoming);
+        // Update played setlist
+        if (d.setlist) { _setlist = d.setlist; if (activeTab === 'played') renderSetlist(_setlist); }
         // Update broadcast mode (audio-only vs video)
         if (d.broadcastMode) broadcastMode = d.broadcastMode;
         // viewer badge
@@ -1530,7 +1545,7 @@
     // ── Tab switching ────────────────────────────────────────────────────────
     function switchTab(tab) {
       activeTab = tab;
-      ['chat','requests','trending','upcoming'].forEach(t => {
+      ['chat','requests','trending','upcoming','played'].forEach(t => {
         document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
         document.getElementById('pane-' + t).classList.toggle('active', t === tab);
       });
@@ -1544,6 +1559,7 @@
         renderUpcoming(_upcomingTracks);
         loadUpcoming(); // refresh vote counts when tab is opened
       }
+      if (tab === 'played') renderSetlist(_setlist);
     }
 
     // ── Requests ─────────────────────────────────────────────────────────────
@@ -1756,6 +1772,26 @@
                </button>`
             : `<span style="font-size:.72em;color:#444">${t.votes ? t.votes + ' 👍' : ''}</span>`
           }
+        </div>`;
+      }).join('');
+    }
+
+    function renderSetlist(tracks) {
+      const el = document.getElementById('played-list');
+      if (!tracks || !tracks.length) {
+        el.innerHTML = '<div class="trend-empty">Nothing played yet this session</div>';
+        return;
+      }
+      // Reverse so newest is first
+      const reversed = [...tracks].reverse();
+      el.innerHTML = reversed.map((t, i) => {
+        const num  = tracks.length - i;
+        const ts   = new Date(t.time);
+        const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `<div class="played-item">
+          <span class="played-num">${num}</span>
+          <span class="played-title">${esc(t.title)}</span>
+          <span class="played-time">${time}</span>
         </div>`;
       }).join('');
     }
