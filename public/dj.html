@@ -35,8 +35,8 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
   gap:10px;padding:10px;overflow:auto;align-items:start}
 
 /* ── Deck card ── */
-.deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;
-  display:flex;flex-direction:column;gap:10px}
+.deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;
+  display:flex;flex-direction:column;gap:7px}
 .deck.a{border-top:3px solid #4488ff}
 .deck.b{border-top:3px solid var(--accent)}
 .deck-label{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
@@ -94,7 +94,7 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .eq-label{font-size:.65em;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .eq-val{font-size:.72em;color:var(--yellow);min-height:14px;text-align:center}
 input.eq-knob{writing-mode:vertical-lr;direction:rtl;
-  width:28px;height:80px;
+  width:28px;height:60px;
   accent-color:var(--accent);cursor:pointer}
 
 /* ── Volume ── */
@@ -251,7 +251,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   border-top:1px solid var(--border)}
 
 /* ── Cue points ── */
-.cue-row{display:flex;gap:5px;margin-top:2px}
+.cue-row{display:flex;gap:5px;margin-top:0}
 .cue-btn{
   flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
   background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
@@ -265,7 +265,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 .cue-btn.set3{border-color:#ff66cc;color:#ff66cc;background:#1a0015}
 
 /* ── Loop points ── */
-.loop-row{display:flex;gap:5px;margin-top:2px}
+.loop-row{display:flex;gap:5px;margin-top:0}
 .loop-btn{
   flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
   background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
@@ -279,7 +279,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 @keyframes loop-pulse{0%,100%{box-shadow:0 0 0 0 rgba(68,255,136,.35)}50%{box-shadow:0 0 0 5px rgba(68,255,136,0)}}
 
 /* ── Loop roll ── */
-.roll-row{display:flex;gap:4px;margin-top:2px}
+.roll-row{display:flex;gap:4px;margin-top:0}
 .roll-btn{
   flex:1;padding:4px 2px;border:1px solid #2a2a2a;border-radius:5px;
   background:var(--panel);color:#555;cursor:pointer;font-size:.68em;
@@ -814,26 +814,27 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="cue-btn" id="cueA2" onclick="triggerCue('A',2)" oncontextmenu="clearCue(event,'A',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
       <button class="cue-btn" id="cueA3" onclick="triggerCue('A',3)" oncontextmenu="clearCue(event,'A',3)" title="Click: set/jump · Right-click: clear">CUE 4</button>
     </div>
-    <!-- Loop points -->
-    <div class="loop-row">
-      <button class="loop-btn" id="loopInA" onclick="setLoopIn('A')" oncontextmenu="clearLoopIn(event,'A')" title="Set loop in · Right-click: clear">IN</button>
-      <button class="loop-btn" id="loopBtnA" onclick="toggleLoop('A')" title="Toggle loop (L)">LOOP</button>
-      <button class="loop-btn" id="loopOutA" onclick="setLoopOut('A')" oncontextmenu="clearLoopOut(event,'A')" title="Set loop out · Right-click: clear">OUT</button>
-    </div>
-    <!-- Loop roll -->
-    <div class="roll-row">
-      <button class="roll-btn" id="rollA0"
-        onpointerdown="startRoll('A',0.25)" onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
-        title="Hold: loop 1/4 bar · Release: continue">¼</button>
-      <button class="roll-btn" id="rollA1"
-        onpointerdown="startRoll('A',0.5)"  onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
-        title="Hold: loop ½ bar · Release: continue">½</button>
-      <button class="roll-btn" id="rollA2"
-        onpointerdown="startRoll('A',1)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
-        title="Hold: loop 1 bar · Release: continue">1</button>
-      <button class="roll-btn" id="rollA3"
-        onpointerdown="startRoll('A',2)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
-        title="Hold: loop 2 bars · Release: continue">2</button>
+    <!-- Loop points + roll -->
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="loop-row">
+        <button class="loop-btn" id="loopInA" onclick="setLoopIn('A')" oncontextmenu="clearLoopIn(event,'A')" title="Set loop in · Right-click: clear">IN</button>
+        <button class="loop-btn" id="loopBtnA" onclick="toggleLoop('A')" title="Toggle loop (L)">LOOP</button>
+        <button class="loop-btn" id="loopOutA" onclick="setLoopOut('A')" oncontextmenu="clearLoopOut(event,'A')" title="Set loop out · Right-click: clear">OUT</button>
+      </div>
+      <div class="roll-row">
+        <button class="roll-btn" id="rollA0"
+          onpointerdown="startRoll('A',0.25)" onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+          title="Hold: loop 1/4 bar · Release: continue">¼</button>
+        <button class="roll-btn" id="rollA1"
+          onpointerdown="startRoll('A',0.5)"  onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+          title="Hold: loop ½ bar · Release: continue">½</button>
+        <button class="roll-btn" id="rollA2"
+          onpointerdown="startRoll('A',1)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+          title="Hold: loop 1 bar · Release: continue">1</button>
+        <button class="roll-btn" id="rollA3"
+          onpointerdown="startRoll('A',2)"    onpointerup="stopRoll('A')" onpointerleave="stopRoll('A')"
+          title="Hold: loop 2 bars · Release: continue">2</button>
+      </div>
     </div>
   </div>
 
@@ -1043,26 +1044,27 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <button class="cue-btn" id="cueB2" onclick="triggerCue('B',2)" oncontextmenu="clearCue(event,'B',2)" title="Click: set/jump · Right-click: clear">CUE 3</button>
       <button class="cue-btn" id="cueB3" onclick="triggerCue('B',3)" oncontextmenu="clearCue(event,'B',3)" title="Click: set/jump · Right-click: clear">CUE 4</button>
     </div>
-    <!-- Loop points -->
-    <div class="loop-row">
-      <button class="loop-btn" id="loopInB" onclick="setLoopIn('B')" oncontextmenu="clearLoopIn(event,'B')" title="Set loop in · Right-click: clear">IN</button>
-      <button class="loop-btn" id="loopBtnB" onclick="toggleLoop('B')" title="Toggle loop (L)">LOOP</button>
-      <button class="loop-btn" id="loopOutB" onclick="setLoopOut('B')" oncontextmenu="clearLoopOut(event,'B')" title="Set loop out · Right-click: clear">OUT</button>
-    </div>
-    <!-- Loop roll -->
-    <div class="roll-row">
-      <button class="roll-btn" id="rollB0"
-        onpointerdown="startRoll('B',0.25)" onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
-        title="Hold: loop 1/4 bar · Release: continue">¼</button>
-      <button class="roll-btn" id="rollB1"
-        onpointerdown="startRoll('B',0.5)"  onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
-        title="Hold: loop ½ bar · Release: continue">½</button>
-      <button class="roll-btn" id="rollB2"
-        onpointerdown="startRoll('B',1)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
-        title="Hold: loop 1 bar · Release: continue">1</button>
-      <button class="roll-btn" id="rollB3"
-        onpointerdown="startRoll('B',2)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
-        title="Hold: loop 2 bars · Release: continue">2</button>
+    <!-- Loop points + roll -->
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="loop-row">
+        <button class="loop-btn" id="loopInB" onclick="setLoopIn('B')" oncontextmenu="clearLoopIn(event,'B')" title="Set loop in · Right-click: clear">IN</button>
+        <button class="loop-btn" id="loopBtnB" onclick="toggleLoop('B')" title="Toggle loop (L)">LOOP</button>
+        <button class="loop-btn" id="loopOutB" onclick="setLoopOut('B')" oncontextmenu="clearLoopOut(event,'B')" title="Set loop out · Right-click: clear">OUT</button>
+      </div>
+      <div class="roll-row">
+        <button class="roll-btn" id="rollB0"
+          onpointerdown="startRoll('B',0.25)" onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+          title="Hold: loop 1/4 bar · Release: continue">¼</button>
+        <button class="roll-btn" id="rollB1"
+          onpointerdown="startRoll('B',0.5)"  onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+          title="Hold: loop ½ bar · Release: continue">½</button>
+        <button class="roll-btn" id="rollB2"
+          onpointerdown="startRoll('B',1)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+          title="Hold: loop 1 bar · Release: continue">1</button>
+        <button class="roll-btn" id="rollB3"
+          onpointerdown="startRoll('B',2)"    onpointerup="stopRoll('B')" onpointerleave="stopRoll('B')"
+          title="Hold: loop 2 bars · Release: continue">2</button>
+      </div>
     </div>
   </div>
 
