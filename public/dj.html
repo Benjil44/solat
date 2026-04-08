@@ -1826,7 +1826,7 @@ async function toggleCamera() {
         toast('Switching to video — reconnecting…');
         stopLive(true);
         broadcastStream = null;
-        setTimeout(() => startLive(), 1200);
+        setTimeout(() => startLive(), 1500);
       } else {
         toast('Camera on — go live to share with viewers');
       }
@@ -1867,7 +1867,7 @@ async function toggleScreen() {
         toast('Switching to video — reconnecting…');
         stopLive(true);
         broadcastStream = null;
-        setTimeout(() => startLive(), 1200);
+        setTimeout(() => startLive(), 1500);
       } else {
         toast('Screen sharing on — go live to share with viewers');
       }
@@ -1962,6 +1962,28 @@ function setBroadcastMode(mode) {
     document.getElementById('viz-canvas').style.display = 'block';
   } else if (mode === 'audio') {
     document.getElementById('viz-canvas').style.display = 'none';
+    // Stop any active camera or screen share
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+      broadcastVideoTrack = null;
+      document.getElementById('cam-preview').style.display = 'none';
+      document.getElementById('camBtn').classList.remove('active');
+    }
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+      broadcastVideoTrack = null;
+      document.getElementById('cam-preview').style.display = 'none';
+      document.getElementById('screenBtn').classList.remove('active');
+    }
+    // If live, restart in audio-only mode
+    if (isLive) {
+      toast('Switching to audio only — reconnecting…');
+      stopLive(true);
+      broadcastStream = null;
+      setTimeout(() => startLive(), 1500);
+    }
   }
 }
 

@@ -10,6 +10,7 @@ let browserIsLive = false;
 let broadcastMode = 'video';     // 'video' | 'audio'
 let currentRecordingFile = null;
 let sessionStartTime     = null;
+let sessionStartMs       = 0;   // ms timestamp — manifest must be newer than this
 let setlist              = [];   // [{ title, time }] — current session only
 
 // ── Persistent session history ────────────────────────────────────────────────
@@ -39,7 +40,12 @@ function isManifestReady() {
   if (!browserIsLive) return false;
   const streamKey = process.env.STREAM_KEY || 'djlive';
   const hlsDir    = path.join(__dirname, '../media/live', streamKey);
-  try { return fs.existsSync(path.join(hlsDir, 'index.m3u8')); } catch { return false; }
+  try {
+    const stat = fs.statSync(path.join(hlsDir, 'index.m3u8'));
+    // Manifest must have been written AFTER this session started — prevents
+    // the old session's stale manifest from triggering a premature startStream()
+    return stat.mtimeMs >= sessionStartMs;
+  } catch { return false; }
 }
 function getStreamTitle()      { return streamTitle; }
 function setStreamTitle(t) {
@@ -72,8 +78,10 @@ function setupStreamWS(wss) {
         ws.close(4002, 'Already broadcasting');
         return;
       }
-      // Stale / closing socket from a previous session — clean it up and allow reconnect
+      // Stale / closing socket from a previous session — remove its listeners so its
+      // pending 'close' event doesn't kill the new FFmpeg process we're about to start.
       console.log('[DJ] Clearing stale djSocket (readyState=%d)', djSocket.readyState);
+      djSocket.removeAllListeners();
       stopFFmpeg();
       djSocket = null;
     }
@@ -132,17 +140,19 @@ function startFFmpeg(mode = 'video') {
   const hlsIndex   = path.join(hlsDir, 'index.m3u8').replace(/\\/g, '/');
   const hlsSegment = path.join(hlsDir, 'seg%03d.ts').replace(/\\/g, '/');
 
-  // Recording filename: session_2026-03-24_1730.mkv
+  // Recording filename: session_2026-03-24_173042.mkv (includes seconds to avoid collisions on restart)
   const now   = new Date();
   const stamp = now.getFullYear() + '-' +
     String(now.getMonth()+1).padStart(2,'0') + '-' +
     String(now.getDate()).padStart(2,'0') + '_' +
     String(now.getHours()).padStart(2,'0') +
-    String(now.getMinutes()).padStart(2,'0');
+    String(now.getMinutes()).padStart(2,'0') +
+    String(now.getSeconds()).padStart(2,'0');
   const recFile = path.join(recDir, `session_${stamp}.mkv`).replace(/\\/g, '/');
 
   currentRecordingFile = recFile;
   sessionStartTime     = now.toISOString();
+  sessionStartMs       = now.getTime();
   setlist              = [];   // fresh setlist each session
 
   const hlsCommon = [
@@ -225,8 +235,10 @@ function stopFFmpeg() {
   if (ffmpegProc) {
     try { ffmpegProc.stdin.end(); } catch (_) {}
     const proc = ffmpegProc;
-    // Give FFmpeg 3s to flush + finalize the recording, then force-kill if still running
-    const killTimer = setTimeout(() => { try { proc.kill('SIGTERM'); } catch (_) {} }, 3000);
+    // Give FFmpeg 800ms to flush + finalize the recording, then force-kill.
+    // Keeping this short prevents old FFmpeg from overwriting HLS segments
+    // of a new session that may start ~1.5s after disconnect.
+    const killTimer = setTimeout(() => { try { proc.kill('SIGTERM'); } catch (_) {} }, 800);
     // Cancel the force-kill if FFmpeg exits cleanly on its own
     proc.once('close', () => clearTimeout(killTimer));
     ffmpegProc = null;

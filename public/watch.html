@@ -625,6 +625,8 @@
     let hls = null, pollTimer = null, heartbeatTimer = null, countdownInterval = null;
     let isPlaying = false, isConnecting = false, chatOpen = false, wsChat = null;
     let hlsErrCount = 0;
+    let _reconnectGrace = false;  // true during 8s grace window after stream drop
+    let _reconnectTimer = null;
     let userHasUnmuted = false;  // true after the user explicitly unmutes — survives HLS restarts
     let userToken   = null;
     let _scheduledAt = null; // upcoming go-live time from server
@@ -927,7 +929,20 @@
         // Update played setlist
         if (d.setlist) { _setlist = d.setlist; if (activeTab === 'played') renderSetlist(_setlist); }
         // Update broadcast mode (audio-only vs video)
-        if (d.broadcastMode) broadcastMode = d.broadcastMode;
+        if (d.broadcastMode && d.broadcastMode !== broadcastMode) {
+          broadcastMode = d.broadcastMode;
+          if (broadcastMode === 'video' && isPlaying) {
+            videoMode = true;
+            applyViewMode();
+            document.getElementById('view-toggle-btn').classList.add('show');
+          } else if (broadcastMode === 'audio' && isPlaying) {
+            videoMode = false;
+            applyViewMode();
+            document.getElementById('view-toggle-btn').classList.remove('show');
+          }
+        } else if (d.broadcastMode) {
+          broadcastMode = d.broadcastMode;
+        }
         // viewer badge
         const vb = document.getElementById('viewer-badge');
         if (d.live && d.viewers > 0) {
@@ -939,16 +954,31 @@
         document.getElementById('cover-wrap').classList.toggle('live', !!d.live);
 
         if (d.live && d.manifestReady && !isPlaying && !isConnecting) {
+          // Stream is back — clear any reconnect grace window
+          _reconnectGrace = false;
+          clearTimeout(_reconnectTimer);
+          _reconnectTimer = null;
           startStream(d.streamKey);
         } else if (d.live && !d.manifestReady && !isPlaying && !isConnecting) {
           // Manifest not ready yet (FFmpeg still starting) — show loading state, retry in 2s
-          showLoadingStream();
+          if (!_reconnectGrace) showLoadingStream();
           clearTimeout(pollTimer);
-          pollTimer = setTimeout(pollStatus, 2000);
+          pollTimer = setTimeout(pollStatus, 1000);
           return;
         } else if (!d.live && isPlaying) {
-          stopStream();
-        } else if (!d.live) {
+          // Stream dropped — start grace period instead of immediately showing offline
+          if (!_reconnectGrace) {
+            _reconnectGrace = true;
+            showReconnecting();
+            if (hls) { hls.destroy(); hls = null; }
+            isPlaying = false;
+            isConnecting = false;
+            _reconnectTimer = setTimeout(() => {
+              _reconnectGrace = false;
+              stopStream();
+            }, 8000);
+          }
+        } else if (!d.live && !isPlaying && !_reconnectGrace) {
           showOffline();
         }
       } catch {}
@@ -957,8 +987,9 @@
 
     function scheduleNextPoll() {
       clearTimeout(pollTimer);
-      // Poll every 3s while offline, every 8s while playing (less pressure)
-      pollTimer = setTimeout(pollStatus, isPlaying ? 8000 : 3000);
+      // 1s during reconnect grace, 8s while playing, 3s while offline
+      const delay = _reconnectGrace ? 1000 : (isPlaying ? 8000 : 3000);
+      pollTimer = setTimeout(pollStatus, delay);
     }
 
     function showSessionExpired() {
@@ -1028,6 +1059,8 @@
           if (isAudioOnly) {
             videoMode = false;
             document.getElementById('view-toggle-btn').classList.remove('show');
+          } else {
+            videoMode = true;
           }
           hideOverlay();
           liveBadge.style.display = 'block';
@@ -1126,6 +1159,9 @@
     }
 
     function stopStream() {
+      _reconnectGrace = false;
+      clearTimeout(_reconnectTimer);
+      _reconnectTimer = null;
       if (hls) { hls.destroy(); hls = null; }
       video.src = '';
       isPlaying = false;
@@ -1144,9 +1180,8 @@
       if (vc) vc.style.display = 'none';
       if (_vizFrame) { cancelAnimationFrame(_vizFrame); _vizFrame = null; }
       _vizInit = false; // allow re-init on next connect
-      // Hide unmute hint
+      // Hide unmute hint (userHasUnmuted resets in showOffline, not here — persists across brief restarts)
       document.getElementById('unmute-hint').classList.remove('show');
-      userHasUnmuted = false;  // reset for next stream session
       // Reset to artwork view and hide the toggle
       video.classList.remove('visible');
       document.getElementById('now-playing').classList.remove('hidden');
@@ -1183,6 +1218,7 @@
 
     function showOffline() {
       _loadingShown = false;
+      userHasUnmuted = false;  // reset only on true offline (not brief restart)
       clearInterval(countdownInterval);
       overlay.style.display = 'flex';
 
@@ -1220,6 +1256,15 @@
       maybeShowPushNudge();
     }
 
+    function showReconnecting() {
+      clearInterval(countdownInterval);
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <div class="vinyl spinning"></div>
+        <div id="overlay-title">Reconnecting…</div>
+        <div id="overlay-sub">DJ is switching — back in a moment</div>`;
+    }
+
     function showConnecting() {
       clearInterval(countdownInterval);
       overlay.style.display = 'flex';
@@ -1248,6 +1293,7 @@
     function hideOverlay() {
       clearInterval(countdownInterval);
       overlay.style.display = 'none';
+      _loadingShown = false;
       // Audio-only mode: force artwork/vinyl view, hide video toggle
       if (broadcastMode === 'audio') {
         videoMode = false;
@@ -1410,7 +1456,7 @@
       try {
         if (document.pictureInPictureElement) {
           await document.exitPictureInPicture();
-        } else if (video && !video.paused) {
+        } else if (video && video.readyState >= 2) {
           await video.requestPictureInPicture();
         }
       } catch { /* browser may block if not user-gesture or unsupported */ }
