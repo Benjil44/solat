@@ -54,7 +54,7 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
       }],
       metadata:    { username: user.username },
       success_url: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${baseUrl}/pricing.html`,
+      cancel_url:  `${baseUrl}/pricing.html?cancelled=1`,
     });
     res.json({ url: session.url });
   } catch (err) {

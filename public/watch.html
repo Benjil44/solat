@@ -648,6 +648,12 @@
 
     // ── Init ─────────────────────────────────────────────────
     async function init() {
+      // Show welcome toast if returning from successful Stripe checkout
+      if (new URLSearchParams(location.search).get('subscribed') === '1') {
+        history.replaceState({}, '', location.pathname); // clean URL
+        setTimeout(() => toast('🎉 You\'re now a member — enjoy the stream!'), 800);
+      }
+
       const res  = await fetch('/api/me');
       const data0 = res.ok ? await res.json() : {};
       const isGuest = !data0.authenticated || new URLSearchParams(location.search).has('guest');

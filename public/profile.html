@@ -139,6 +139,9 @@
         <div class="profile-reg" id="p-reg"></div>
         <span class="sub-pill" id="p-sub-pill"></span>
         <span class="sub-days" id="p-days"></span>
+        <a href="/pricing.html" id="p-subscribe-btn" style="display:none;margin-top:10px;
+           padding:8px 18px;background:#ff4400;color:#fff;border-radius:8px;font-size:.85em;
+           font-weight:bold;text-decoration:none;letter-spacing:.5px">Subscribe →</a>
       </div>
     </div>
 
@@ -333,6 +336,17 @@
         days.textContent = '';
       } else {
         days.textContent = user.daysLeft + ' day' + (user.daysLeft !== 1 ? 's' : '') + ' remaining';
+      }
+
+      // Show subscribe/renew button for trial and expired users (only when payments enabled)
+      if (user.subType === 'trial' || user.subType === 'expired') {
+        fetch('/payment/config').then(r => r.json()).then(cfg => {
+          if (cfg.enabled) {
+            const btn = document.getElementById('p-subscribe-btn');
+            btn.textContent = user.subType === 'expired' ? 'Renew Access →' : 'Subscribe →';
+            btn.style.display = 'inline-block';
+          }
+        }).catch(() => {});
       }
 
       if (stats && stats.total > 0) {
