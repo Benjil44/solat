@@ -72,6 +72,13 @@
       <li>Secure checkout via Stripe</li>
     </ul>
 
+    <div id="promo-row" style="display:none;margin-bottom:12px">
+      <input id="promo-input" type="text" placeholder="Promo code (optional)"
+        style="width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:7px;
+               color:#fff;padding:9px 12px;font-size:.88em;outline:none;letter-spacing:1px"
+        oninput="this.value=this.value.toUpperCase()">
+    </div>
+
     <button class="subscribe-btn" id="subscribe-btn" onclick="startCheckout()">
       <span>Subscribe Now</span>
       <div class="spinner"></div>
@@ -104,6 +111,8 @@
                           : cfg.interval === 'year'  ? '/year'
                           : ` · ${cfg.days} days access`;
       document.getElementById('price-sub').textContent = intervalLabel;
+      // Show promo code field if enabled
+      if (cfg.allowPromo) document.getElementById('promo-row').style.display = 'block';
     } catch {
       document.getElementById('price-sub').textContent = 'Could not load pricing info';
     }
@@ -115,8 +124,13 @@
     btn.disabled = true;
     setErr('');
 
+    const promoCode = (document.getElementById('promo-input')?.value || '').trim() || undefined;
     try {
-      const res  = await fetch('/payment/create-checkout', { method: 'POST' });
+      const res  = await fetch('/payment/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promoCode }),
+      });
       const data = await res.json();
       if (!res.ok) { setErr(data.error || 'Could not start checkout'); reset(); return; }
       window.location.href = data.url;

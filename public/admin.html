@@ -1539,7 +1539,7 @@
     // ── Password reset requests ───────────────────────────────────────────────
     async function loadResetRequests() {
       try {
-        const res  = await fetch('/api/admin/reset-requests', { headers: { 'x-admin-key': ADMIN_KEY } });
+        const res  = await fetch('/api/admin/reset-requests');
         if (!res.ok) return;
         const { requests } = await res.json();
         const section = document.getElementById('reset-req-section');
@@ -1593,7 +1593,7 @@
       if (!dt) { msg.style.color = '#ff6666'; msg.textContent = 'Pick a date and time'; return; }
       const res = await fetch('/api/admin/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduledAt: new Date(dt).toISOString(), repeat })
       });
       if (res.ok) {
@@ -1612,7 +1612,7 @@
       const msg = document.getElementById('sched-msg');
       const res = await fetch('/api/admin/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduledAt: null })
       });
       if (res.ok) {
@@ -1630,7 +1630,7 @@
       if (!text) return;
       const res = await fetch('/api/admin/announce', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
       });
       if (res.ok) {

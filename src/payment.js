@@ -18,7 +18,13 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
   : null;
 
-const ACCESS_DAYS = parseInt(process.env.STRIPE_ACCESS_DAYS, 10) || 30;
+const ACCESS_DAYS      = parseInt(process.env.STRIPE_ACCESS_DAYS, 10) || 30;
+// Set STRIPE_MODE=subscription in .env for recurring billing (requires a recurring price in Stripe)
+// Default is 'payment' (one-time). Subscription mode ignores ACCESS_DAYS — access is managed by
+// customer.subscription.status events instead (invoice.payment_succeeded / customer.subscription.deleted).
+const CHECKOUT_MODE    = process.env.STRIPE_MODE === 'subscription' ? 'subscription' : 'payment';
+// Set STRIPE_ALLOW_PROMO=true to enable promo/coupon codes at checkout
+const ALLOW_PROMO      = process.env.STRIPE_ALLOW_PROMO === 'true';
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
@@ -33,7 +39,7 @@ function requireAuth(req, res, next) {
 // ── GET /payment/config — let the frontend know if payments are enabled ────────
 router.get('/config', async (req, res) => {
   const enabled = !!stripe && !!process.env.STRIPE_PRICE_ID;
-  if (!enabled) return res.json({ enabled: false, days: ACCESS_DAYS });
+  if (!enabled) return res.json({ enabled: false, days: ACCESS_DAYS, mode: CHECKOUT_MODE, allowPromo: ALLOW_PROMO });
 
   // Fetch the real price from Stripe so the frontend can display it
   try {
@@ -43,7 +49,7 @@ router.get('/config', async (req, res) => {
     const symbol   = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£';
     const display  = amount ? `${symbol}${(amount / 100).toFixed(2)}` : null;
     const interval = price.recurring ? price.recurring.interval : null;  // 'month', 'year', or null
-    res.json({ enabled, days: ACCESS_DAYS, display, interval, currency });
+    res.json({ enabled, days: ACCESS_DAYS, display, interval, currency, mode: CHECKOUT_MODE, allowPromo: ALLOW_PROMO });
   } catch (err) {
     console.warn('[Stripe] price fetch failed:', err.message);
     res.json({ enabled, days: ACCESS_DAYS, display: null, interval: null });
@@ -82,10 +88,12 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
   const user = findUser(req.user.username);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  const promoCode = req.body.promoCode ? String(req.body.promoCode).trim() : null;
+
   try {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const session = await stripe.checkout.sessions.create({
-      mode:                 'payment',   // one-time; change to 'subscription' for recurring
+    const baseUrl    = `${req.protocol}://${req.get('host')}`;
+    const sessionCfg = {
+      mode:                 CHECKOUT_MODE,
       payment_method_types: ['card'],
       line_items: [{
         price:    process.env.STRIPE_PRICE_ID,
@@ -94,7 +102,17 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
       metadata:    { username: user.username },
       success_url: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${baseUrl}/pricing.html?cancelled=1`,
-    });
+    };
+    if (ALLOW_PROMO) sessionCfg.allow_promotion_codes = true;
+    // If user supplied a specific promo code, look it up and apply it directly
+    if (promoCode) {
+      try {
+        const codes = await stripe.promotionCodes.list({ code: promoCode, active: true, limit: 1 });
+        if (codes.data.length) sessionCfg.discounts = [{ promotion_code: codes.data[0].id }];
+        else return res.status(400).json({ error: 'Invalid or expired promo code' });
+      } catch { /* ignore promo lookup errors; proceed without discount */ }
+    }
+    const session = await stripe.checkout.sessions.create(sessionCfg);
     res.json({ url: session.url });
   } catch (err) {
     console.error('[Stripe] create-checkout error:', err.message);
