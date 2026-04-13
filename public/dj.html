@@ -33,11 +33,14 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 
 /* ── Main layout ── */
 .studio{flex:0 0 auto;display:grid;grid-template-columns:1fr 240px 1fr;
-  gap:10px;padding:10px}
+  gap:10px;padding:10px;min-width:0;overflow:hidden}
+
+/* Prevent individual deck columns from bleeding outside the grid */
+.deck{min-width:0}
 
 /* ── Deck card ── */
 .deck{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;
-  display:flex;flex-direction:column;gap:7px}
+  display:flex;flex-direction:column;gap:7px;overflow-y:auto;overflow-x:hidden}
 .deck.a{border-top:3px solid #4488ff}
 .deck.b{border-top:3px solid var(--accent)}
 .deck-label{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
@@ -116,7 +119,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   transition:height 0.05s;border-radius:2px}
 
 /* ── CENTER COLUMN ── */
-.center-col{display:flex;flex-direction:column;gap:7px}
+.center-col{display:flex;flex-direction:column;gap:7px;overflow-y:auto;overflow-x:hidden;min-width:0}
 
 /* Crossfader */
 .crossfader-card{background:var(--card);border:1px solid var(--border);
@@ -360,12 +363,17 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
 /* ── Bottom tabbed panel ── */
 .bottom-tabs-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  margin:0 10px 10px;overflow:hidden}
-.bottom-tabs-bar{display:flex;border-bottom:1px solid var(--border);background:var(--panel)}
-.btab{flex:1;padding:8px 6px;background:transparent;border:none;border-bottom:2px solid transparent;
+  margin:0 10px 10px;overflow:hidden;min-height:0}
+.bottom-tabs-bar{display:flex;border-bottom:1px solid var(--border);background:var(--panel);
+  overflow-x:auto;scrollbar-width:none}
+.bottom-tabs-bar::-webkit-scrollbar{display:none}
+.btab{flex:0 0 auto;min-width:60px;padding:8px 10px;background:transparent;border:none;
+  border-bottom:2px solid transparent;
   color:var(--muted);cursor:pointer;font-size:.75em;font-weight:bold;letter-spacing:.5px;
   text-transform:uppercase;transition:.15s;white-space:nowrap;
   display:inline-flex;align-items:center;justify-content:center;gap:4px}
+/* Icon-only utility tabs get less padding */
+.btab.icon-only{min-width:38px;padding:8px 8px}
 .btab .material-symbols-outlined{font-size:16px;font-weight:300;text-transform:none;letter-spacing:0}
 .btab:hover{color:#ccc}
 .btab.active{color:#fff;border-bottom-color:var(--accent)}
@@ -539,13 +547,14 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
 /* ── Playlist Panel (inside btab-panel) ── */
 .playlist-panel{display:flex;flex-direction:column;gap:8px;height:100%}
-.pl-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pl-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:6px}
 .pl-lbl{font-size:.7em;font-weight:bold;letter-spacing:2px;color:var(--muted);
   text-transform:uppercase;white-space:nowrap}
-.pl-add-btn{padding:5px 13px;background:var(--panel);border:1px solid var(--border);
-  border-radius:6px;color:#ccc;cursor:pointer;font-size:.8em;white-space:nowrap}
+.pl-add-btn{padding:5px 11px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;color:#ccc;cursor:pointer;font-size:.78em;white-space:nowrap}
 .pl-add-btn:hover{border-color:var(--accent);color:var(--accent)}
-.autodj-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+/* AutoDJ block: pushes right when there's room, wraps to its own line when not */
+.autodj-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:nowrap;flex-shrink:0}
 .xfade-lbl{font-size:.75em;color:var(--muted);white-space:nowrap}
 #xfadeTimeVal{font-size:.75em;color:var(--yellow);min-width:26px}
 .autodj-btn{padding:7px 16px;border:1px solid var(--border);border-radius:7px;
@@ -630,6 +639,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   /* Playlist header: tighten gaps so buttons don't overflow */
   .pl-header{gap:6px}
   .pl-add-btn{padding:4px 9px;font-size:.77em}
+  /* Tab bar: reduce padding at ≤800px to fit all items without scroll */
+  .btab{padding:8px 5px;font-size:.7em;letter-spacing:0;min-width:50px}
 }
 
 /* Mobile ≤640px: single column stack */
@@ -694,6 +705,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   .pl-add-btn{padding:4px 7px;font-size:.73em}
   .autodj-row{margin-left:0;width:100%}
   .xfade-lbl{display:none}
+  /* Tab bar: hide text labels, show icons only to save space */
+  .btab{font-size:0;min-width:40px;padding:8px 4px}
+  .btab .material-symbols-outlined{font-size:18px}
+  .btab span:not(.material-symbols-outlined){display:none}
 
   /* Setlist */
   .setlist-card{margin:0 8px 8px;padding:10px}
@@ -937,8 +952,9 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <!-- Record + Schedule accordion -->
       <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
         <button onclick="toggleRecSched()" id="recSchedToggle"
-          style="width:100%;background:var(--panel);border:none;color:#888;font-size:.75em;
-                 padding:6px 10px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px">
+          style="width:100%;background:var(--panel);border:none;color:#aaa;font-size:.78em;
+                 padding:8px 10px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;
+                 transition:color .15s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">
           <span id="recSchedArrow" style="transition:transform .2s"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">chevron_right</span></span>
           <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">radio_button_checked</span> Record &amp; Schedule
           <span id="recTimer" style="margin-left:auto;color:var(--accent);font-variant-numeric:tabular-nums"></span>
@@ -1093,8 +1109,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     <button class="btab"        id="btab-requests" onclick="switchBTab('requests')">
       <span class="material-symbols-outlined">mic</span> Requests <span class="req-panel-badge" id="req-panel-badge"></span>
     </button>
-    <button class="btab" onclick="toggleOBSPanel()" style="flex:0;padding:8px 12px" title="OBS / External Source"><span class="material-symbols-outlined">tune</span></button>
-    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 10px;gap:4px" title="Keyboard Shortcuts"><span class="material-symbols-outlined">keyboard</span><span style="font-size:.7em;letter-spacing:0;color:var(--muted)">Keys</span></button>
+    <button class="btab icon-only" onclick="toggleOBSPanel()" title="OBS / External Source settings"><span class="material-symbols-outlined">tune</span></button>
+    <button class="btab icon-only" onclick="toggleKBPanel()" title="Keyboard Shortcuts" style="gap:3px"><span class="material-symbols-outlined">keyboard</span><span style="font-size:.65em;letter-spacing:0;color:var(--muted)">Keys</span></button>
   </div>
 
   <!-- OBS + Keyboard panels (shown above tab bar when toggled) -->
