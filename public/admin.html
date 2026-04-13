@@ -505,6 +505,7 @@
     <a class="snav-btn" href="#sec-musicdb"><span class="material-symbols-outlined">library_music</span>Music DB</a>
     <a class="snav-btn" href="#sec-muted"><span class="material-symbols-outlined">block</span>Muted</a>
     <a class="snav-btn" href="#sec-wordfilter"><span class="material-symbols-outlined">filter_alt</span>Word Filter</a>
+    <a class="snav-btn" href="#sec-schedule"><span class="material-symbols-outlined">schedule</span>Schedule</a>
     <a class="snav-btn" href="#sec-announce"><span class="material-symbols-outlined">campaign</span>Announce</a>
     <a class="snav-btn" href="#sec-requests"><span class="material-symbols-outlined">queue_music</span>Requests</a>
     <a class="snav-btn" href="#sec-audit"><span class="material-symbols-outlined">fact_check</span>Audit</a>
@@ -562,6 +563,11 @@
           <tr><td colspan="6" class="empty">Loading...</td></tr>
         </tbody>
       </table>
+    </div>
+    <!-- Password reset requests -->
+    <div id="reset-req-section" style="display:none;margin-top:18px;border-top:1px solid #1e1e1e;padding-top:14px">
+      <div style="font-size:.72em;font-weight:bold;letter-spacing:2px;color:#ff4400;text-transform:uppercase;margin-bottom:10px">⚠ Password Reset Requests</div>
+      <div id="reset-req-list"></div>
     </div>
   </div>
 
@@ -662,6 +668,25 @@
     <div id="wf-list"><div class="empty">No words filtered. Chat is unfiltered.</div></div>
   </div>
 
+  <!-- Schedule -->
+  <div class="content" id="sec-schedule">
+    <div class="section-header">
+      <div class="section-title">📅 Go-Live Schedule</div>
+      <button class="btn-sm btn-danger" id="sched-clear-btn" onclick="clearSchedule()" style="display:none">Clear</button>
+    </div>
+    <div id="sched-current" style="font-size:.85em;color:#888;margin-bottom:14px">Loading…</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="sched-dt" type="datetime-local"
+        style="background:#111;border:1px solid #2a2a2a;border-radius:7px;
+               color:#ccc;padding:7px 10px;font-size:.85em;outline:none">
+      <label style="display:flex;align-items:center;gap:6px;font-size:.82em;color:#888;cursor:pointer">
+        <input type="checkbox" id="sched-repeat" style="accent-color:#ff4400"> Weekly repeat
+      </label>
+      <button class="btn-sm btn-extend" onclick="setSchedule()">Set</button>
+    </div>
+    <div class="form-msg" id="sched-msg" style="margin-top:6px;min-height:1em;font-size:.8em"></div>
+  </div>
+
   <!-- Broadcast Announcement -->
   <div class="content" id="sec-announce">
     <div class="section-header">
@@ -709,13 +734,14 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey(), loadWordFilter(), loadRequestHistory()]);
+      await Promise.all([loadUsers(), loadStreamStatus(), loadLiveStats(), loadRecordings(), loadInvites(), loadSessionHistory(), loadCorrections('pending'), loadMutedUsers(), loadAuditLog(), loadStreamKey(), loadWordFilter(), loadRequestHistory(), loadSchedule(), loadResetRequests()]);
       setInterval(loadUsers, 30000);
       setInterval(loadStreamStatus, 5000);
       setInterval(loadLiveStats, 5000);
       setInterval(loadRecordings, 60000);
       setInterval(loadCorrections, 60000);
       setInterval(loadMutedUsers, 30000);
+      setInterval(loadResetRequests, 60000);
     }
 
     // ── Live Session Stats ─────────────────────────────────────────────────────
@@ -1508,6 +1534,93 @@
           <span class="audit-details" title="${esc(details)}">${esc(details)}</span>
         </div>`;
       }).join('');
+    }
+
+    // ── Password reset requests ───────────────────────────────────────────────
+    async function loadResetRequests() {
+      try {
+        const res  = await fetch('/api/admin/reset-requests', { headers: { 'x-admin-key': ADMIN_KEY } });
+        if (!res.ok) return;
+        const { requests } = await res.json();
+        const section = document.getElementById('reset-req-section');
+        const list    = document.getElementById('reset-req-list');
+        if (!requests.length) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+        list.innerHTML = requests.map(r => {
+          const dt = new Date(r.requestedAt).toLocaleString([], { dateStyle:'short', timeStyle:'short' });
+          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #1a1a1a;font-size:.83em">
+            <span style="color:#ccc;min-width:100px">${esc(r.username)}</span>
+            <span style="color:#888;font-size:.85em">${dt}</span>
+            <code style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:5px;padding:2px 8px;
+                         color:#ff4400;letter-spacing:2px;font-size:1em">${esc(r.token)}</code>
+            <span style="color:#555;font-size:.8em">expires ${new Date(r.expires).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+          </div>`;
+        }).join('');
+      } catch {}
+    }
+
+    // ── Schedule ──────────────────────────────────────────────────────────────
+    async function loadSchedule() {
+      try {
+        const res  = await fetch('/api/schedule');
+        const data = res.ok ? await res.json() : {};
+        renderSchedule(data);
+      } catch {
+        document.getElementById('sched-current').textContent = 'Could not load schedule';
+      }
+    }
+
+    function renderSchedule(data) {
+      const el        = document.getElementById('sched-current');
+      const clearBtn  = document.getElementById('sched-clear-btn');
+      if (data && data.scheduledAt) {
+        const dt = new Date(data.scheduledAt);
+        el.innerHTML = `<strong style="color:#ff4400">Scheduled:</strong> ${dt.toLocaleString([], {
+          weekday:'short', year:'numeric', month:'short', day:'numeric',
+          hour:'2-digit', minute:'2-digit'
+        })}${data.repeat ? ' <span style="color:#888;font-size:.85em">(weekly repeat)</span>' : ''}`;
+        clearBtn.style.display = 'inline-block';
+      } else {
+        el.textContent = 'No schedule set';
+        clearBtn.style.display = 'none';
+      }
+    }
+
+    async function setSchedule() {
+      const dt     = document.getElementById('sched-dt').value;
+      const repeat = document.getElementById('sched-repeat').checked;
+      const msg    = document.getElementById('sched-msg');
+      if (!dt) { msg.style.color = '#ff6666'; msg.textContent = 'Pick a date and time'; return; }
+      const res = await fetch('/api/admin/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        body: JSON.stringify({ scheduledAt: new Date(dt).toISOString(), repeat })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        renderSchedule(data);
+        msg.style.color = '#44cc88';
+        msg.textContent = 'Schedule saved';
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      } else {
+        msg.style.color = '#ff6666';
+        msg.textContent = 'Failed to save schedule';
+      }
+    }
+
+    async function clearSchedule() {
+      const msg = document.getElementById('sched-msg');
+      const res = await fetch('/api/admin/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        body: JSON.stringify({ scheduledAt: null })
+      });
+      if (res.ok) {
+        renderSchedule({});
+        msg.style.color = '#44cc88';
+        msg.textContent = 'Schedule cleared';
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      }
     }
 
     async function sendAnnouncement() {

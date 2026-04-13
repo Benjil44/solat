@@ -142,6 +142,10 @@
         <a href="/pricing.html" id="p-subscribe-btn" style="display:none;margin-top:10px;
            padding:8px 18px;background:#ff4400;color:#fff;border-radius:8px;font-size:.85em;
            font-weight:bold;text-decoration:none;letter-spacing:.5px">Subscribe →</a>
+        <button id="p-manage-btn" onclick="openBillingPortal()" style="display:none;margin-top:10px;
+           padding:8px 18px;background:transparent;border:1px solid #333;color:#888;
+           border-radius:8px;font-size:.85em;cursor:pointer;letter-spacing:.5px">Manage subscription</button>
+        <div id="p-manage-msg" style="font-size:.78em;color:#ff6666;margin-top:4px;min-height:1em"></div>
       </div>
     </div>
 
@@ -338,16 +342,18 @@
         days.textContent = user.daysLeft + ' day' + (user.daysLeft !== 1 ? 's' : '') + ' remaining';
       }
 
-      // Show subscribe/renew button for trial and expired users (only when payments enabled)
-      if (user.subType === 'trial' || user.subType === 'expired') {
-        fetch('/payment/config').then(r => r.json()).then(cfg => {
-          if (cfg.enabled) {
-            const btn = document.getElementById('p-subscribe-btn');
-            btn.textContent = user.subType === 'expired' ? 'Renew Access →' : 'Subscribe →';
-            btn.style.display = 'inline-block';
-          }
-        }).catch(() => {});
-      }
+      // Show subscribe/renew or manage-subscription button based on payments config
+      fetch('/payment/config').then(r => r.json()).then(cfg => {
+        if (!cfg.enabled) return;
+        if (user.subType === 'trial' || user.subType === 'expired') {
+          const btn = document.getElementById('p-subscribe-btn');
+          btn.textContent = user.subType === 'expired' ? 'Renew Access →' : 'Subscribe →';
+          btn.style.display = 'inline-block';
+        }
+        if (user.subType === 'paid') {
+          document.getElementById('p-manage-btn').style.display = 'inline-block';
+        }
+      }).catch(() => {});
 
       if (stats && stats.total > 0) {
         document.getElementById('p-stats-row').style.display = 'flex';
@@ -373,6 +379,24 @@
           <span class="req-date">${date}</span>
         </div>`;
       }).join('');
+    }
+
+    async function openBillingPortal() {
+      const btn = document.getElementById('p-manage-btn');
+      const msg = document.getElementById('p-manage-msg');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting…';
+      msg.textContent = '';
+      try {
+        const res  = await fetch('/payment/portal', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error');
+        window.location.href = data.url;
+      } catch (err) {
+        msg.textContent = err.message || 'Could not open billing portal';
+        btn.disabled = false;
+        btn.textContent = 'Manage subscription';
+      }
     }
 
     async function changePassword() {

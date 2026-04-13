@@ -117,6 +117,50 @@ function setSuspended(username, suspended) {
   return true;
 }
 
+// ─── Password reset tokens ────────────────────────────────────────────────────
+// Stores short-lived tokens in users.json. Admin sees pending requests and
+// shares the token with the user (e.g. via Discord/email).
+function saveResetToken(username) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  const token   = require('crypto').randomBytes(4).toString('hex').toUpperCase(); // 8-char
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();      // 24h
+  users[username].resetToken   = token;
+  users[username].resetExpires = expires;
+  users[username].resetRequestedAt = new Date().toISOString();
+  saveUsers(users);
+  return token;
+}
+
+function consumeResetToken(username, token) {
+  const users = loadUsers();
+  const u = users[username];
+  if (!u || !u.resetToken) return false;
+  if (u.resetToken !== token.toUpperCase()) return false;
+  if (new Date(u.resetExpires).getTime() < Date.now()) return false;
+  delete u.resetToken;
+  delete u.resetExpires;
+  delete u.resetRequestedAt;
+  saveUsers(users);
+  return true;
+}
+
+function listResetRequests() {
+  const users = loadUsers();
+  const now   = Date.now();
+  return Object.values(users)
+    .filter(u => u.resetToken && u.resetExpires && new Date(u.resetExpires).getTime() > now)
+    .map(u => ({ username: u.username, token: u.resetToken, requestedAt: u.resetRequestedAt, expires: u.resetExpires }));
+}
+
+function saveStripeCustomer(username, customerId) {
+  const users = loadUsers();
+  if (!users[username]) return false;
+  users[username].stripeCustomerId = customerId;
+  saveUsers(users);
+  return true;
+}
+
 function setChatBan(username, banned) {
   const users = loadUsers();
   if (!users[username]) return false;
@@ -162,4 +206,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, updatePushPrefs, getPushPrefs, extendSubscription, setSuspended, setChatBan, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, updatePushPrefs, getPushPrefs, extendSubscription, setSuspended, setChatBan, saveStripeCustomer, saveResetToken, consumeResetToken, listResetRequests, createToken, verifyToken, getSubscriptionStatus };

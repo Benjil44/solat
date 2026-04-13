@@ -3,7 +3,7 @@ const bcrypt    = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const router    = express.Router();
 
-const { createUser, findUser, deleteUser, updatePassword, updateAvatar, createToken, getSubscriptionStatus } = require('./users');
+const { createUser, findUser, deleteUser, updatePassword, updateAvatar, createToken, getSubscriptionStatus, saveResetToken, consumeResetToken, listResetRequests } = require('./users');
 const { validateInvite, useInvite } = require('./invites');
 
 const loginLimiter = rateLimit({
@@ -194,6 +194,30 @@ router.get('/token', (req, res) => {
   const payload = verifyToken(token);
   if (!payload) return res.status(401).json({ error: 'Invalid token' });
   res.json({ token });
+});
+
+// POST /auth/forgot-password — user requests a reset; admin sees the request
+router.post('/forgot-password', loginLimiter, (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  const user = findUser(username);
+  // Always return 200 to avoid username enumeration
+  if (user) saveResetToken(username);
+  res.json({ ok: true, message: 'If that account exists, a reset request has been created. Contact the admin to get your temporary password.' });
+});
+
+// POST /auth/reset-password — consume a reset token (admin-generated temp password flow)
+router.post('/reset-password', loginLimiter, async (req, res) => {
+  const { username, token, newPassword } = req.body;
+  if (!username || !token || !newPassword)
+    return res.status(400).json({ error: 'username, token, and newPassword required' });
+  if (newPassword.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const ok = consumeResetToken(username, token);
+  if (!ok) return res.status(400).json({ error: 'Invalid or expired reset token' });
+  const hashed = await bcrypt.hash(newPassword, 10);
+  updatePassword(username, hashed);
+  res.json({ ok: true });
 });
 
 module.exports = router;

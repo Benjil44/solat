@@ -14,7 +14,7 @@ const helmet      = require('helmet');
 const authRoutes    = require('./src/auth');
 const adminRoutes   = require('./src/admin');
 const paymentRoutes = require('./src/payment');
-const { verifyToken, findUser, getSubscriptionStatus } = require('./src/users');
+const { verifyToken, findUser, getSubscriptionStatus, listResetRequests } = require('./src/users');
 const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getBroadcastMode, isManifestReady, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
 const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB, manualAddTrack, removeTrack: removeDBTrack } = require('./src/music-db');
@@ -625,6 +625,11 @@ app.post('/api/admin/reset-password/:username', requireAdmin, async (req, res) =
   updatePassword(username, hashed);
   logAudit('admin', 'reset-password', { username });
   res.json({ ok: true, tempPassword: tempPass });
+});
+
+// ─── Admin: list pending password reset requests ──────────────────────────────
+app.get('/api/admin/reset-requests', requireAdmin, (req, res) => {
+  res.json({ requests: listResetRequests() });
 });
 
 // ─── Admin: audit log ────────────────────────────────────────────────────────

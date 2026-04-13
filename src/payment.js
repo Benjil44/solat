@@ -7,7 +7,7 @@
 
 const express  = require('express');
 const router   = express.Router();
-const { verifyToken, findUser, extendSubscription } = require('./users');
+const { verifyToken, findUser, extendSubscription, saveStripeCustomer } = require('./users');
 
 // Tip notification callback — set by server.js after chat WS is ready
 let _onTip = null;
@@ -31,11 +31,46 @@ function requireAuth(req, res, next) {
 }
 
 // ── GET /payment/config — let the frontend know if payments are enabled ────────
-router.get('/config', (req, res) => {
-  res.json({
-    enabled: !!stripe && !!process.env.STRIPE_PRICE_ID,
-    days:    ACCESS_DAYS,
-  });
+router.get('/config', async (req, res) => {
+  const enabled = !!stripe && !!process.env.STRIPE_PRICE_ID;
+  if (!enabled) return res.json({ enabled: false, days: ACCESS_DAYS });
+
+  // Fetch the real price from Stripe so the frontend can display it
+  try {
+    const price    = await stripe.prices.retrieve(process.env.STRIPE_PRICE_ID);
+    const amount   = price.unit_amount;                                  // pence/cents
+    const currency = (price.currency || 'gbp').toUpperCase();
+    const symbol   = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£';
+    const display  = amount ? `${symbol}${(amount / 100).toFixed(2)}` : null;
+    const interval = price.recurring ? price.recurring.interval : null;  // 'month', 'year', or null
+    res.json({ enabled, days: ACCESS_DAYS, display, interval, currency });
+  } catch (err) {
+    console.warn('[Stripe] price fetch failed:', err.message);
+    res.json({ enabled, days: ACCESS_DAYS, display: null, interval: null });
+  }
+});
+
+// ── POST /payment/portal — create a Stripe Billing Portal session ─────────────
+// Lets users view invoices and cancel their subscription.
+router.post('/portal', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Payments not configured' });
+
+  const user = findUser(req.user.username);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!user.stripeCustomerId)
+    return res.status(400).json({ error: 'No billing account found — contact support' });
+
+  try {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const session = await stripe.billingPortal.sessions.create({
+      customer:   user.stripeCustomerId,
+      return_url: `${baseUrl}/profile.html`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[Stripe] portal error:', err.message);
+    res.status(500).json({ error: 'Could not open billing portal' });
+  }
 });
 
 // ── POST /payment/create-checkout ─────────────────────────────────────────────
@@ -147,7 +182,8 @@ router.post('/webhook', (req, res) => {
       console.log(`[Stripe] Tip received — ${username} tipped ${display}`);
       if (_onTip) _onTip({ username, amount, display });
     } else {
-      // Subscription payment — extend access
+      // Subscription payment — extend access and save Stripe customer ID for portal
+      if (session.customer) saveStripeCustomer(username, session.customer);
       const newExpiry = extendSubscription(username, ACCESS_DAYS);
       console.log(`[Stripe] Payment received — extended ${username} by ${ACCESS_DAYS}d → ${newExpiry}`);
     }

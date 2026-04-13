@@ -1,11 +1,16 @@
 // DJ Stream Service Worker
-const CACHE = 'djstream-v5';
+const CACHE = 'djstream-v6';
 
 // Static assets to pre-cache on install
 const PRECACHE = [
   '/watch.html',
   '/profile.html',
   '/offline.html',
+  '/index.html',
+  '/fonts/material-symbols-outlined.css',
+  '/fonts/material-symbols-outlined.woff2',
+  '/hls.min.js',
+  '/manifest.json',
 ];
 
 self.addEventListener('install', e => {

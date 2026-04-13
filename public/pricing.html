@@ -84,6 +84,10 @@
 
 <script>
   async function init() {
+    // Show success message if returning from Stripe
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('cancelled')) setErr('Payment cancelled — you were not charged.');
+
     try {
       const res = await fetch('/payment/config');
       const cfg = await res.json();
@@ -94,18 +98,15 @@
         document.getElementById('price-sub').textContent = 'Contact the DJ for access';
         return;
       }
-      document.getElementById('price-sub').textContent =
-        `${cfg.days} days of access · one-time payment`;
-      document.getElementById('price-display').textContent = ''; // Stripe shows price on checkout
-      document.getElementById('price-sub').textContent =
-        `${cfg.days} days of full access`;
+      // Show real price fetched from Stripe
+      document.getElementById('price-display').textContent = cfg.display || '—';
+      const intervalLabel = cfg.interval === 'month' ? '/month'
+                          : cfg.interval === 'year'  ? '/year'
+                          : ` · ${cfg.days} days access`;
+      document.getElementById('price-sub').textContent = intervalLabel;
     } catch {
       document.getElementById('price-sub').textContent = 'Could not load pricing info';
     }
-
-    // Show success message if returning from Stripe
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('cancelled')) setErr('Payment cancelled — you were not charged.');
   }
 
   async function startCheckout() {

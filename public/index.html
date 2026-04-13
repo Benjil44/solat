@@ -208,6 +208,24 @@
         <label for="remember-me" style="margin:0;cursor:pointer;color:#888;font-weight:normal">Remember me for 30 days</label>
       </div>
       <button class="btn" id="login-btn" onclick="doLogin()">WATCH LIVE</button>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="showForgotForm()" style="background:none;border:none;color:#555;font-size:.78em;cursor:pointer;text-decoration:underline">Forgot password?</button>
+      </div>
+    </div>
+
+    <!-- Forgot password form -->
+    <div id="forgot-form" style="display:none">
+      <p style="color:#888;font-size:.82em;margin-bottom:14px;line-height:1.5">
+        Enter your username below. A reset request will be created — the admin will provide you with a temporary password (e.g. via Discord).
+      </p>
+      <div class="form-group">
+        <label>USERNAME</label>
+        <input type="text" id="forgot-user" placeholder="Your username" autocomplete="username">
+      </div>
+      <button class="btn" id="forgot-btn" onclick="doForgot()">REQUEST RESET</button>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="showTab('login')" style="background:none;border:none;color:#555;font-size:.78em;cursor:pointer;text-decoration:underline">← Back to login</button>
+      </div>
     </div>
 
     <!-- Register form -->
@@ -241,12 +259,41 @@
 
   <script>
     function showTab(tab) {
-      document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+      document.getElementById('login-form').style.display    = tab === 'login'    ? 'block' : 'none';
       document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+      document.getElementById('forgot-form').style.display   = 'none';
       document.querySelectorAll('.tab-btn').forEach((b, i) => {
         b.classList.toggle('active', (i === 0) === (tab === 'login'));
       });
       showMsg('', '');
+    }
+
+    function showForgotForm() {
+      document.getElementById('login-form').style.display  = 'none';
+      document.getElementById('forgot-form').style.display = 'block';
+      showMsg('', '');
+    }
+
+    async function doForgot() {
+      const btn      = document.getElementById('forgot-btn');
+      const username = document.getElementById('forgot-user').value.trim();
+      if (!username) { showMsg('Enter your username', 'error'); return; }
+      btn.disabled   = true;
+      btn.textContent = 'Sending…';
+      try {
+        const res  = await fetch('/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username }),
+        });
+        const data = await res.json();
+        showMsg(data.message || 'Request sent — contact the admin for your temporary password.', 'success');
+      } catch {
+        showMsg('Network error — try again', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'REQUEST RESET';
+      }
     }
 
     function showMsg(text, type) {
