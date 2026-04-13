@@ -49,9 +49,13 @@ header h1{font-size:1.2em;color:var(--accent);letter-spacing:2px}
 .deck.loaded .clear-deck-btn{display:inline-flex;align-items:center;gap:3px}
 
 /* ── Track load ── */
-.load-area{background:var(--bg);border:2px dashed var(--border);border-radius:8px;
+.load-area{background:var(--bg);border:2px dashed #383838;border-radius:8px;
   padding:14px;text-align:center;cursor:pointer;transition:.2s;position:relative}
+/* Deck A drop zone: blue tint; Deck B: orange tint — matches their top-border colours */
+.deck.a .load-area{border-color:#4488ff55}
+.deck.b .load-area{border-color:#ff440055}
 .load-area:hover,.load-area.drag{border-color:var(--accent);background:#1a0f00}
+.deck.a .load-area:hover,.deck.a .load-area.drag{border-color:#4488ff;background:#00102a}
 .load-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
 .load-area .icon{font-size:1.6em;margin-bottom:5px}
 .load-area .hint{font-size:.78em;color:var(--muted)}
@@ -157,8 +161,14 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
   color:#ccc;border-radius:7px;cursor:pointer;text-align:center;transition:.15s;
   display:flex;align-items:center;justify-content:center}
 .cam-btn .material-symbols-outlined{font-size:20px;line-height:1}
+.cam-btn-label{font-size:.6em;color:var(--muted);margin-top:2px;letter-spacing:.3px;line-height:1}
 .cam-btn:hover{border-color:var(--accent)}
+.cam-btn:hover .cam-btn-label{color:#ccc}
 .cam-btn.active{background:#1a0800;border-color:var(--accent);color:var(--accent)}
+.cam-btn.active .cam-btn-label{color:var(--accent)}
+/* Master deck glow — set via JS when crossfader moves */
+.deck.master-a{box-shadow:0 0 0 2px #4488ff44}
+.deck.master-b{box-shadow:0 0 0 2px #ff440044}
 .go-live-btn{width:100%;padding:14px;border:none;border-radius:8px;
   font-size:1.05em;font-weight:bold;cursor:pointer;letter-spacing:1px;transition:.15s}
 .go-live-btn.off{background:var(--accent);color:#fff}
@@ -262,8 +272,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* ── Cue points ── */
 .cue-row{display:flex;gap:5px;margin-top:0}
 .cue-btn{
-  flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
-  background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
+  flex:1;padding:7px 4px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#444;cursor:pointer;font-size:.75em;
   font-weight:bold;letter-spacing:.5px;transition:.1s;white-space:nowrap;
   text-align:center;min-width:0}
 .cue-btn:hover{border-color:#666;color:#aaa}
@@ -276,8 +286,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* ── Loop points ── */
 .loop-row{display:flex;gap:5px;margin-top:0}
 .loop-btn{
-  flex:1;padding:5px 4px;border:1px solid #2a2a2a;border-radius:5px;
-  background:var(--panel);color:#444;cursor:pointer;font-size:.72em;
+  flex:1;padding:7px 4px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#444;cursor:pointer;font-size:.75em;
   font-weight:bold;letter-spacing:.5px;transition:.1s;white-space:nowrap;
   text-align:center;min-width:0}
 .loop-btn:hover{border-color:#666;color:#aaa}
@@ -290,8 +300,8 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 /* ── Loop roll ── */
 .roll-row{display:flex;gap:4px;margin-top:0}
 .roll-btn{
-  flex:1;padding:4px 2px;border:1px solid #2a2a2a;border-radius:5px;
-  background:var(--panel);color:#555;cursor:pointer;font-size:.68em;
+  flex:1;padding:6px 2px;border:1px solid #2a2a2a;border-radius:5px;
+  background:var(--panel);color:#555;cursor:pointer;font-size:.7em;
   font-weight:bold;text-align:center;min-width:0;user-select:none;
   transition:background .1s,border-color .1s}
 .roll-btn:hover{border-color:#ff9900;color:#ff9900}
@@ -777,7 +787,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
 
     <!-- Speed / Pitch -->
     <div class="speed-wrap">
-      <span style="color:var(--muted);font-size:.75em">SPEED</span>
+      <span style="color:var(--muted);font-size:.75em">TEMPO</span>
       <input type="range" id="speedA" min="0.5" max="2" step="0.01" value="1"
         oninput="_cancelRamp('A');setSpeed('A',this.value)">
       <span class="speed-val" id="speedValA">100%</span>
@@ -789,19 +799,19 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <span class="eq-label">Bass</span>
         <input class="eq-knob" type="range" id="bassA" min="-20" max="20" step="1" value="0"
           oninput="setEQ('A','bass',this.value)">
-        <span class="eq-val" id="bassValA">0</span>
+        <span class="eq-val" id="bassValA">0 dB</span>
       </div>
       <div class="eq-col">
         <span class="eq-label">Mid</span>
         <input class="eq-knob" type="range" id="midA" min="-20" max="20" step="1" value="0"
           oninput="setEQ('A','mid',this.value)">
-        <span class="eq-val" id="midValA">0</span>
+        <span class="eq-val" id="midValA">0 dB</span>
       </div>
       <div class="eq-col">
         <span class="eq-label">High</span>
         <input class="eq-knob" type="range" id="highA" min="-20" max="20" step="1" value="0"
           oninput="setEQ('A','high',this.value)">
-        <span class="eq-val" id="highValA">0</span>
+        <span class="eq-val" id="highValA">0 dB</span>
       </div>
       <!-- Level meter -->
       <div class="meter-row" id="meterA">
@@ -887,10 +897,10 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <canvas id="viz-canvas" width="320" height="180"></canvas>
 
       <div class="cam-btns">
-        <div class="cam-btn" id="camBtn" onclick="toggleCamera()" title="Camera"><span class="material-symbols-outlined">videocam</span></div>
-        <div class="cam-btn" id="screenBtn" onclick="toggleScreen()" title="Share Screen"><span class="material-symbols-outlined">screen_share</span></div>
-        <div class="cam-btn" id="micBtn" onclick="toggleMic()" title="Microphone"><span class="material-symbols-outlined">mic</span></div>
-        <div class="cam-btn" id="monitorMuteBtn" onclick="toggleMonitorMute()" title="Monitor — mute your local speakers only, stream keeps playing"><span class="material-symbols-outlined">headphones</span></div>
+        <div class="cam-btn" id="camBtn" onclick="toggleCamera()" title="Toggle camera — adds video to the stream"><span class="material-symbols-outlined">videocam</span><span class="cam-btn-label">Camera</span></div>
+        <div class="cam-btn" id="screenBtn" onclick="toggleScreen()" title="Share your screen — broadcasts it as the video feed"><span class="material-symbols-outlined">screen_share</span><span class="cam-btn-label">Screen</span></div>
+        <div class="cam-btn" id="micBtn" onclick="toggleMic()" title="Toggle microphone — mix your voice into the stream"><span class="material-symbols-outlined">mic</span><span class="cam-btn-label">Mic</span></div>
+        <div class="cam-btn" id="monitorMuteBtn" onclick="toggleMonitorMute()" title="Monitor mute — silences your local speakers only; stream is unaffected (shortcut: M)"><span class="material-symbols-outlined">headphones</span><span class="cam-btn-label">Monitor</span></div>
       </div>
 
       <!-- Stream title + cover art -->
@@ -905,7 +915,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       </div>
       <div class="title-row">
         <input class="title-input" type="text" id="nextTrackInput"
-          placeholder="Next track (teaser for viewers)..." maxlength="120">
+          placeholder="Next track preview for viewers…" maxlength="120">
         <button class="title-btn" onclick="updateNextTrack()">Next</button>
       </div>
 
@@ -993,7 +1003,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
     </div>
 
     <div class="speed-wrap">
-      <span style="color:var(--muted);font-size:.75em">SPEED</span>
+      <span style="color:var(--muted);font-size:.75em">TEMPO</span>
       <input type="range" id="speedB" min="0.5" max="2" step="0.01" value="1"
         oninput="_cancelRamp('B');setSpeed('B',this.value)">
       <span class="speed-val" id="speedValB">100%</span>
@@ -1004,19 +1014,19 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <span class="eq-label">Bass</span>
         <input class="eq-knob" type="range" id="bassB" min="-20" max="20" step="1" value="0"
           oninput="setEQ('B','bass',this.value)">
-        <span class="eq-val" id="bassValB">0</span>
+        <span class="eq-val" id="bassValB">0 dB</span>
       </div>
       <div class="eq-col">
         <span class="eq-label">Mid</span>
         <input class="eq-knob" type="range" id="midB" min="-20" max="20" step="1" value="0"
           oninput="setEQ('B','mid',this.value)">
-        <span class="eq-val" id="midValB">0</span>
+        <span class="eq-val" id="midValB">0 dB</span>
       </div>
       <div class="eq-col">
         <span class="eq-label">High</span>
         <input class="eq-knob" type="range" id="highB" min="-20" max="20" step="1" value="0"
           oninput="setEQ('B','high',this.value)">
-        <span class="eq-val" id="highValB">0</span>
+        <span class="eq-val" id="highValB">0 dB</span>
       </div>
       <div class="meter-row" id="meterB">
         <div class="meter-bar"><div class="meter-fill" id="meterFillBL"></div></div>
@@ -1084,7 +1094,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
       <span class="material-symbols-outlined">mic</span> Requests <span class="req-panel-badge" id="req-panel-badge"></span>
     </button>
     <button class="btab" onclick="toggleOBSPanel()" style="flex:0;padding:8px 12px" title="OBS / External Source"><span class="material-symbols-outlined">tune</span></button>
-    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 12px" title="Keyboard Shortcuts"><span class="material-symbols-outlined">keyboard</span></button>
+    <button class="btab" onclick="toggleKBPanel()"  style="flex:0;padding:8px 10px;gap:4px" title="Keyboard Shortcuts"><span class="material-symbols-outlined">keyboard</span><span style="font-size:.7em;letter-spacing:0;color:var(--muted)">Keys</span></button>
   </div>
 
   <!-- OBS + Keyboard panels (shown above tab bar when toggled) -->
@@ -1122,7 +1132,7 @@ input.eq-knob{writing-mode:vertical-lr;direction:rtl;
         <button class="pl-add-btn" onclick="document.getElementById('plFileInput').click()">+ Add Tracks</button>
         <button class="pl-add-btn" onclick="exportPlaylist()" title="Save playlist as JSON"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">save</span> Save</button>
         <button class="pl-add-btn" onclick="document.getElementById('plJsonInput').click()" title="Load saved playlist JSON"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">folder_open</span> Load</button>
-        <button class="pl-add-btn" id="shareUpcomingBtn" onclick="shareUpcoming()" title="Share upcoming tracks with viewers"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">share</span> Share</button>
+        <button class="pl-add-btn" id="shareUpcomingBtn" onclick="shareUpcoming()" title="Publish upcoming tracks to viewers — they'll see the next few songs in your queue"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle">share</span> Share</button>
         <input type="file" id="plJsonInput" accept=".json" style="display:none"
           onchange="importPlaylist(this.files[0]);this.value=''">
         <input type="file" id="plFileInput" accept="audio/*" multiple style="display:none"
@@ -1314,6 +1324,15 @@ function setCrossfader(v) {
   const cf = parseFloat(v);       // 0=all A, 1=all B
   decks.A.outGain.gain.value = 1 - cf;
   decks.B.outGain.gain.value = cf;
+  // Visual master-deck indicator: glow the dominant deck
+  const deckAEl = document.getElementById('deckA');
+  const deckBEl = document.getElementById('deckB');
+  if (deckAEl && deckBEl) {
+    deckAEl.classList.toggle('master-a', cf <= 0.5);
+    deckBEl.classList.toggle('master-b', cf >  0.5);
+    deckAEl.classList.remove('master-b');
+    deckBEl.classList.remove('master-a');
+  }
 }
 
 // Called when user physically drags the slider — cancels any running animation
@@ -1499,9 +1518,10 @@ function updatePlayBtn(id) {
 function setEQ(id, band, val) {
   val = parseFloat(val);
   const deck = decks[id];
-  if (band === 'bass') { deck.bass.gain.value = val; document.getElementById('bassVal' + id).textContent = val; }
-  if (band === 'mid')  { deck.mid.gain.value  = val; document.getElementById('midVal'  + id).textContent = val; }
-  if (band === 'high') { deck.high.gain.value = val; document.getElementById('highVal' + id).textContent = val; }
+  const v = Number(val);
+  if (band === 'bass') { deck.bass.gain.value = v; document.getElementById('bassVal' + id).textContent = (v > 0 ? '+' : '') + v + ' dB'; }
+  if (band === 'mid')  { deck.mid.gain.value  = v; document.getElementById('midVal'  + id).textContent = (v > 0 ? '+' : '') + v + ' dB'; }
+  if (band === 'high') { deck.high.gain.value = v; document.getElementById('highVal' + id).textContent = (v > 0 ? '+' : '') + v + ' dB'; }
 }
 
 function setSpeed(id, val) {
@@ -3108,9 +3128,10 @@ function checkPlaylistRestore() {
     if (!meta.length) return;
     const banner = document.createElement('div');
     banner.id = 'restore-banner';
-    banner.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);' +
+    banner.style.cssText = 'position:fixed;top:58px;left:50%;transform:translateX(-50%);' +
       'background:#111;border:1px solid #444;border-radius:10px;padding:10px 16px;' +
-      'display:flex;align-items:center;gap:10px;font-size:.82em;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.7)';
+      'display:flex;align-items:center;gap:10px;font-size:.82em;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.7);' +
+      'white-space:nowrap';
     banner.innerHTML = `<span style="color:#ccc"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">history</span> Restore ${meta.length} track${meta.length>1?'s':''} from last session?</span>
       <button onclick="restorePlaylist()" style="background:#ff4400;border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.9em">Restore</button>
       <button onclick="dismissRestore()" style="background:transparent;border:1px solid #444;color:#888;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.9em">Dismiss</button>`;
