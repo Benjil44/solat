@@ -9,6 +9,10 @@ const express  = require('express');
 const router   = express.Router();
 const { verifyToken, findUser, extendSubscription } = require('./users');
 
+// Tip notification callback — set by server.js after chat WS is ready
+let _onTip = null;
+function onTip(cb) { _onTip = cb; }
+
 // Initialise Stripe only if the key is present — server starts fine without it
 const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
@@ -63,6 +67,43 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
   }
 });
 
+// ── POST /payment/create-tip ──────────────────────────────────────────────────
+// Creates a Stripe Checkout session for a one-time tip in pence/cents.
+router.post('/create-tip', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Payments not configured' });
+
+  const user   = findUser(req.user.username);
+  if (!user)   return res.status(404).json({ error: 'User not found' });
+
+  const amount = parseInt(req.body.amount, 10); // in pence/cents
+  if (!amount || amount < 50 || amount > 100000)
+    return res.status(400).json({ error: 'Invalid tip amount (50–100000 pence)' });
+
+  try {
+    const baseUrl  = `${req.protocol}://${req.get('host')}`;
+    const currency = (process.env.STRIPE_CURRENCY || 'gbp').toLowerCase();
+    const session  = await stripe.checkout.sessions.create({
+      mode:                 'payment',
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency,
+          unit_amount: amount,
+          product_data: { name: '💸 DJ Tip', description: `Tip from ${user.username}` },
+        },
+        quantity: 1,
+      }],
+      metadata:    { username: user.username, type: 'tip', amount: String(amount), currency },
+      success_url: `${baseUrl}/watch.html?tipped=1`,
+      cancel_url:  `${baseUrl}/watch.html`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[Stripe] create-tip error:', err.message);
+    res.status(500).json({ error: 'Could not create tip session' });
+  }
+});
+
 // ── GET /payment/success — redirect target after Stripe checkout ───────────────
 router.get('/success', (req, res) => {
   res.redirect('/watch.html?subscribed=1');
@@ -93,12 +134,22 @@ router.post('/webhook', (req, res) => {
   if (event.type === 'checkout.session.completed') {
     const session  = event.data.object;
     const username = session.metadata && session.metadata.username;
+    const tipType  = session.metadata && session.metadata.type;
 
-    if (username) {
+    if (!username) {
+      console.warn('[Stripe] checkout.session.completed missing username metadata');
+    } else if (tipType === 'tip') {
+      // Tip payment — notify the DJ via chat broadcast
+      const amount   = parseInt(session.metadata.amount || '0', 10);
+      const currency = (session.metadata.currency || 'gbp').toUpperCase();
+      const symbol   = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£';
+      const display  = `${symbol}${(amount / 100).toFixed(2)}`;
+      console.log(`[Stripe] Tip received — ${username} tipped ${display}`);
+      if (_onTip) _onTip({ username, amount, display });
+    } else {
+      // Subscription payment — extend access
       const newExpiry = extendSubscription(username, ACCESS_DAYS);
       console.log(`[Stripe] Payment received — extended ${username} by ${ACCESS_DAYS}d → ${newExpiry}`);
-    } else {
-      console.warn('[Stripe] checkout.session.completed missing username metadata');
     }
   }
 
@@ -106,3 +157,4 @@ router.post('/webhook', (req, res) => {
 });
 
 module.exports = router;
+module.exports.onTip = onTip;

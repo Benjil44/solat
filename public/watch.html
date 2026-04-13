@@ -361,6 +361,9 @@
     #push-prefs-btn { background:transparent; border:1px solid #333; color:#555;
       padding:4px 7px; border-radius:6px; cursor:pointer; font-size:.78em; display:none; }
     #push-prefs-btn:hover { border-color:#888; color:#aaa; }
+    .tip-amt-btn { background:#1a1a1a; border:1px solid #333; border-radius:8px;
+      color:#ccc; padding:8px 16px; cursor:pointer; font-size:.9em; transition:.15s; }
+    .tip-amt-btn:hover, .tip-amt-btn.selected { background:#ff4400; border-color:#ff4400; color:#fff; }
     #push-prefs-panel { display:none; position:absolute; top:calc(100% + 6px); right:0;
       background:#161616; border:1px solid #333; border-radius:10px;
       padding:14px 16px; min-width:220px; z-index:100;
@@ -450,6 +453,8 @@
     <div class="user-info">
       <span id="username-display"></span>
       <span id="sub-badge" class="badge-trial">...</span>
+      <button class="icon-btn" id="tip-btn" onclick="openTipModal()"
+              title="Tip the DJ" style="display:none"><span class="material-symbols-outlined">payments</span></button>
       <button class="icon-btn" id="clip-btn" onclick="saveClip()"
               title="Save this moment to your profile" style="display:none"><span class="material-symbols-outlined">bookmark_add</span></button>
       <button class="icon-btn" id="pip-btn" onclick="togglePiP()"
@@ -519,6 +524,37 @@
           <div id="now-title">DJ Live Session</div>
           <div id="now-sub">LIVE STREAM</div>
           <div id="next-track-bar">UP NEXT &nbsp;&#8250;&nbsp; <span id="next-track-title"></span></div>
+        </div>
+
+        <!-- Tip modal -->
+        <div id="tip-modal" style="display:none;position:fixed;inset:0;z-index:200;
+             background:rgba(0,0,0,.75);align-items:center;justify-content:center">
+          <div style="background:#111;border:1px solid #2a2a2a;border-radius:16px;
+               padding:28px 24px;max-width:320px;width:90%;text-align:center">
+            <div style="font-size:1.1em;font-weight:bold;margin-bottom:4px">💸 Tip the DJ</div>
+            <div style="font-size:.82em;color:#666;margin-bottom:18px">Choose an amount</div>
+            <div id="tip-amounts" style="display:flex;flex-wrap:wrap;gap:8px;
+                 justify-content:center;margin-bottom:14px">
+              <button class="tip-amt-btn" onclick="selectTip(100)">£1</button>
+              <button class="tip-amt-btn" onclick="selectTip(200)">£2</button>
+              <button class="tip-amt-btn" onclick="selectTip(500)">£5</button>
+              <button class="tip-amt-btn" onclick="selectTip(1000)">£10</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+              <span style="color:#666;font-size:.9em">£</span>
+              <input id="tip-custom" type="number" min="1" max="1000" placeholder="Custom"
+                style="flex:1;background:#0d0d0d;border:1px solid #333;border-radius:7px;
+                       padding:8px 10px;color:#fff;font-size:.9em;outline:none"/>
+            </div>
+            <button id="tip-submit-btn" onclick="submitTip()"
+              style="width:100%;padding:12px;background:#ff4400;color:#fff;border:none;
+                     border-radius:9px;font-size:1em;font-weight:bold;cursor:pointer;
+                     letter-spacing:.5px">Send Tip</button>
+            <div id="tip-err" style="color:#ff6666;font-size:.8em;min-height:16px;margin-top:8px"></div>
+            <button onclick="closeTipModal()"
+              style="margin-top:12px;background:none;border:none;color:#555;
+                     font-size:.82em;cursor:pointer">Cancel</button>
+          </div>
         </div>
 
         <div id="overlay">
@@ -652,6 +688,10 @@
       if (new URLSearchParams(location.search).get('subscribed') === '1') {
         history.replaceState({}, '', location.pathname); // clean URL
         setTimeout(() => toast('🎉 You\'re now a member — enjoy the stream!'), 800);
+      }
+      if (new URLSearchParams(location.search).get('tipped') === '1') {
+        history.replaceState({}, '', location.pathname);
+        setTimeout(() => toast('💸 Tip sent — thanks for supporting the DJ!'), 800);
       }
 
       const res  = await fetch('/api/me');
@@ -1314,6 +1354,8 @@
       }
       // Show clip button for logged-in users (not guests)
       if (!isGuestMode) document.getElementById('clip-btn').style.display = 'inline-block';
+      // Show tip button for logged-in users
+      if (!isGuestMode) document.getElementById('tip-btn').style.display = 'inline-block';
       // Start visualizer once stream is playing
       initVisualizer();
       // Hide push nudge once live
@@ -1466,6 +1508,68 @@
           await video.requestPictureInPicture();
         }
       } catch { /* browser may block if not user-gesture or unsupported */ }
+    }
+
+    // ── Tip modal ─────────────────────────────────────────────────────────────
+    let _tipAmount = 0;
+
+    function openTipModal() {
+      _tipAmount = 0;
+      document.querySelectorAll('.tip-amt-btn').forEach(b => b.classList.remove('selected'));
+      document.getElementById('tip-custom').value = '';
+      document.getElementById('tip-err').textContent = '';
+      const m = document.getElementById('tip-modal');
+      m.style.display = 'flex';
+    }
+
+    function closeTipModal() {
+      document.getElementById('tip-modal').style.display = 'none';
+    }
+
+    function selectTip(pence) {
+      _tipAmount = pence;
+      document.getElementById('tip-custom').value = '';
+      document.querySelectorAll('.tip-amt-btn').forEach(b => b.classList.remove('selected'));
+      // Mark the matching button
+      document.querySelectorAll('.tip-amt-btn').forEach(b => {
+        if (b.getAttribute('onclick') === `selectTip(${pence})`) b.classList.add('selected');
+      });
+    }
+
+    async function submitTip() {
+      document.getElementById('tip-err').textContent = '';
+      // Resolve amount: preset or custom input (in pounds → convert to pence)
+      let amount = _tipAmount;
+      const customVal = document.getElementById('tip-custom').value.trim();
+      if (customVal) {
+        const pounds = parseFloat(customVal);
+        if (isNaN(pounds) || pounds < 0.5 || pounds > 1000) {
+          document.getElementById('tip-err').textContent = 'Enter an amount between £0.50 and £1000';
+          return;
+        }
+        amount = Math.round(pounds * 100);
+      }
+      if (!amount || amount < 50) {
+        document.getElementById('tip-err').textContent = 'Please select or enter a tip amount';
+        return;
+      }
+      const btn = document.getElementById('tip-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting…';
+      try {
+        const res  = await fetch('/payment/create-tip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error');
+        window.location.href = data.url;
+      } catch (err) {
+        document.getElementById('tip-err').textContent = err.message || 'Could not start tip';
+        btn.disabled = false;
+        btn.textContent = 'Send Tip';
+      }
     }
 
     function showChangePwd() {

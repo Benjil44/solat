@@ -154,6 +154,11 @@ app.use('/auth',    authRoutes);
 app.use('/admin',   adminRoutes);
 app.use('/payment', paymentRoutes);
 
+// Wire tip notifications → chat broadcast so all viewers see it
+paymentRoutes.onTip(({ username, display }) => {
+  djAnnounce(`💸 ${username} tipped ${display}!`);
+});
+
 // ─── Live state ───────────────────────────────────────────────────────────────
 let isLive         = false;
 let coverUrl       = '';
