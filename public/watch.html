@@ -328,6 +328,13 @@
     .played-title{ flex:1; color:#ccc; word-break:break-word; }
     .played-time { color:#444; font-size:.75em; flex-shrink:0; white-space:nowrap; }
     .played-item:last-child { border-bottom:none; }
+    .hist-session-head { display:flex; align-items:center; gap:8px; padding:7px 10px;
+      background:#0e0e0e; cursor:pointer; user-select:none;
+      border-bottom:1px solid #1a1a1a; font-size:.78em; color:#555; }
+    .hist-session-head:hover { color:#888; }
+    .hist-session-head .hist-chevron { margin-left:auto; font-size:.7em; transition:.15s; }
+    .hist-session-tracks { display:none; }
+    .hist-session-tracks.open { display:block; }
     .up-item { display:flex; align-items:center; gap:8px; padding:7px 10px;
       background:#0d0d0d; border:1px solid #1a1a1a; border-radius:7px; }
     .up-num { font-size:.7em; color:#555; min-width:18px; text-align:right; font-weight:bold; flex-shrink:0; }
@@ -647,7 +654,8 @@
 
       <!-- Played this session tab -->
       <div class="tab-pane" id="pane-played">
-        <div id="played-list"><div class="trend-empty">Nothing played yet this session</div></div>
+        <div id="played-list" style="overflow-y:auto;flex:1"><div class="trend-empty">Nothing played yet this session</div></div>
+        <div id="played-history" style="border-top:1px solid #1e1e1e;overflow-y:auto;max-height:45%"></div>
       </div>
     </div>
 
@@ -1747,7 +1755,7 @@
         renderUpcoming(_upcomingTracks);
         loadUpcoming(); // refresh vote counts when tab is opened
       }
-      if (tab === 'played') renderSetlist(_setlist);
+      if (tab === 'played') { renderSetlist(_setlist); loadSetlistHistory(); }
     }
 
     // ── Requests ─────────────────────────────────────────────────────────────
@@ -1982,6 +1990,51 @@
           <span class="played-time">${time}</span>
         </div>`;
       }).join('');
+    }
+
+    let _historyLoaded = false;
+    async function loadSetlistHistory() {
+      if (_historyLoaded) return;
+      _historyLoaded = true;
+      const el = document.getElementById('played-history');
+      try {
+        const res  = await fetch('/api/setlist');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.history || !data.history.length) return;
+        el.innerHTML = data.history.map((sess, i) => {
+          const dateStr = sess.start
+            ? new Date(sess.start).toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' })
+            : 'Past session';
+          const timeStr = sess.start
+            ? new Date(sess.start).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+            : '';
+          const tracks  = sess.tracks.map((t, ti) => {
+            const ts   = new Date(t.time);
+            const time = ts.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+            return `<div class="played-item">
+              <span class="played-num">${ti + 1}</span>
+              <span class="played-title">${esc(t.title)}</span>
+              <span class="played-time">${time}</span>
+            </div>`;
+          }).join('');
+          return `
+            <div class="hist-session-head" onclick="toggleHistSession(this)">
+              <span>${dateStr} ${timeStr}</span>
+              <span style="color:#444">${sess.tracks.length} track${sess.tracks.length !== 1 ? 's' : ''}</span>
+              <span class="hist-chevron">▶</span>
+            </div>
+            <div class="hist-session-tracks">${tracks}</div>`;
+        }).join('');
+      } catch { /* silently ignore */ }
+    }
+
+    function toggleHistSession(head) {
+      const tracks  = head.nextElementSibling;
+      const chevron = head.querySelector('.hist-chevron');
+      const open    = tracks.classList.toggle('open');
+      chevron.textContent  = open ? '▼' : '▶';
+      chevron.style.color  = open ? '#ff4400' : '';
     }
 
     function setUpcomingTracks(tracks) {

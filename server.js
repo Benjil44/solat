@@ -346,6 +346,14 @@ app.get('/api/admin/setlist', requireAdmin, (req, res) => {
   res.json({ setlist: getSetlist(), sessionStart: getSessionStartTime() });
 });
 
+// Public setlist — current live tracks + last 5 past sessions (no auth required)
+app.get('/api/setlist', (req, res) => {
+  const live     = getSetlist();
+  const start    = getSessionStartTime();
+  const history  = getSessionHistory().slice(0, 5);
+  res.json({ live, sessionStart: start, history });
+});
+
 // Full session history (persisted across restarts)
 app.get('/api/admin/session-history', requireAdmin, (req, res) => {
   res.json({ sessions: getSessionHistory() });
