@@ -15,7 +15,7 @@ const authRoutes    = require('./src/auth');
 const adminRoutes   = require('./src/admin');
 const paymentRoutes = require('./src/payment');
 const { verifyToken, findUser, getSubscriptionStatus, listResetRequests, incrementWatchTime, markSessionAttended } = require('./src/users');
-const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getBroadcastMode, isManifestReady, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
+const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getBroadcastMode, isManifestReady, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory, setOnStreamEnd } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
 const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB, manualAddTrack, removeTrack: removeDBTrack } = require('./src/music-db');
 const { getWords: getFilterWords, addWord: addFilterWord, removeWord: removeFilterWord } = require('./src/wordfilter');
@@ -172,8 +172,13 @@ const userVotes    = new Map(); // userId (ip or username) → trackId they vote
 // Viewer heartbeat map: username → timestamp
 const viewers = new Map();
 
-const heartbeatLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
-app.post('/api/heartbeat', heartbeatLimiter, requireAuth, (req, res) => {
+// Per-user heartbeat limiter — keyGenerator runs after requireAuth sets req.user
+const heartbeatLimiter = rateLimit({
+  windowMs: 60_000, max: 10,
+  keyGenerator: (req) => req.user?.username || req.ip,
+  standardHeaders: true, legacyHeaders: false,
+});
+app.post('/api/heartbeat', requireAuth, heartbeatLimiter, (req, res) => {
   const username = req.user.username;
   viewers.set(username, Date.now());
   // Track watch time and session attendance only while stream is live
@@ -759,6 +764,20 @@ app.post('/api/admin/rotate-stream-key', requireAdmin, (req, res) => {
   res.json({ key: newKey });
 });
 
+// ─── Admin: server log viewer ────────────────────────────────────────────────
+const LOG_DIR = path.join(__dirname, 'logs');
+app.get('/api/admin/logs', requireAdmin, (req, res) => {
+  const file  = (req.query.file === 'err') ? 'err.log' : 'out.log';
+  const lines = Math.min(parseInt(req.query.lines) || 200, 1000);
+  const logPath = path.join(LOG_DIR, file);
+  if (!fs.existsSync(logPath)) return res.json({ lines: [] });
+  try {
+    const raw  = fs.readFileSync(logPath, 'utf8');
+    const all  = raw.split('\n').filter(Boolean);
+    res.json({ lines: all.slice(-lines) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Track Requests ───────────────────────────────────────────────────────────
 // Viewer: get current request list + accepted play queue
 app.get('/api/requests', requireAuthOrAdmin, (req, res) => {
@@ -1017,6 +1036,9 @@ server.on('upgrade', (req, socket, head) => {
 setupStreamWS(wssStream);
 setupChatWS(wssChat);
 
+// Broadcast instant offline event to all viewers when browser stream ends
+setOnStreamEnd(() => broadcastAll({ type: 'stream_offline' }));
+
 // ─── RTMP / HLS (node-media-server) ──────────────────────────────────────────
 const nmsConfig = {
   rtmp: {
@@ -1065,6 +1087,7 @@ nms.on('prePublish', (id, StreamPath) => {
 nms.on('donePublish', () => {
   isLive = false;
   viewers.clear();
+  broadcastAll({ type: 'stream_offline' });
   console.log('[RTMP] Stream ended');
 });
 

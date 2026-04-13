@@ -254,7 +254,15 @@ function stopFFmpeg() {
   }
   sessionStartTime = null;
   setlist = [];
+  // Notify all viewers immediately (don't wait for status poll)
+  if (_onStreamEnd) try { _onStreamEnd(); } catch (_) {}
 }
+
+// ── Stream-end callback ───────────────────────────────────────────────────────
+// Server.js registers this so it can broadcast the offline event to all viewers
+// without creating a circular dependency (stream-ws → chat-ws).
+let _onStreamEnd = null;
+function setOnStreamEnd(fn) { _onStreamEnd = fn; }
 
 // Called by server graceful-shutdown — stops FFmpeg cleanly before process exits
 function stopFFmpegOnExit() { stopFFmpeg(); }
@@ -264,5 +272,5 @@ module.exports = {
   isDJConnected, isBrowserLive, getBroadcastMode, isManifestReady,
   getCurrentRecording, getSessionStartTime,
   getSetlist, clearSetlist, stopFFmpegOnExit,
-  getSessionHistory,
+  getSessionHistory, setOnStreamEnd,
 };

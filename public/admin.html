@@ -509,6 +509,7 @@
     <a class="snav-btn" href="#sec-announce"><span class="material-symbols-outlined">campaign</span>Announce</a>
     <a class="snav-btn" href="#sec-requests"><span class="material-symbols-outlined">queue_music</span>Requests</a>
     <a class="snav-btn" href="#sec-audit"><span class="material-symbols-outlined">fact_check</span>Audit</a>
+    <a class="snav-btn" href="#sec-logs"><span class="material-symbols-outlined">terminal</span>Logs</a>
   </nav>
 
   <!-- Live Session Stats -->
@@ -760,6 +761,29 @@
       </div>
     </div>
     <div id="audit-list"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- Logs -->
+  <div class="content" id="sec-logs">
+    <div class="section-header">
+      <div class="section-title">Server Logs</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select id="log-file" style="background:#111;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;padding:4px 8px;font-size:.8em;outline:none">
+          <option value="out">out.log (stdout)</option>
+          <option value="err">err.log (stderr)</option>
+        </select>
+        <select id="log-lines" style="background:#111;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;padding:4px 8px;font-size:.8em;outline:none">
+          <option value="100">Last 100 lines</option>
+          <option value="200" selected>Last 200 lines</option>
+          <option value="500">Last 500 lines</option>
+          <option value="1000">Last 1000 lines</option>
+        </select>
+        <button class="btn-sm" onclick="loadLogs()">⟳ Refresh</button>
+      </div>
+    </div>
+    <pre id="log-output" style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
+      padding:12px;font-size:.75em;color:#aaa;overflow-x:auto;overflow-y:auto;
+      max-height:500px;white-space:pre-wrap;word-break:break-all;margin:0">Loading…</pre>
   </div>
 
   <div id="toast"></div>
@@ -1914,6 +1938,24 @@
       el.style.borderColor = isErr ? '#ff4444' : '#ff4400';
       el.style.display = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+
+    // ── Server Logs ───────────────────────────────────────────────────────────
+    async function loadLogs() {
+      const file  = document.getElementById('log-file')?.value || 'out';
+      const lines = document.getElementById('log-lines')?.value || '200';
+      const el    = document.getElementById('log-output');
+      if (!el) return;
+      try {
+        const res  = await fetch(`/api/admin/logs?file=${file}&lines=${lines}`);
+        const data = await res.json();
+        if (data.lines && data.lines.length) {
+          el.textContent = data.lines.join('\n');
+          el.scrollTop   = el.scrollHeight; // scroll to bottom (newest lines)
+        } else {
+          el.textContent = '(no log entries)';
+        }
+      } catch (e) { el.textContent = 'Failed to load logs: ' + e.message; }
     }
 
     init();
