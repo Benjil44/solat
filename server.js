@@ -1086,7 +1086,7 @@ app.use((err, req, res, next) => {
 const USERS_DB   = path.join(__dirname, 'data', 'users.json');
 const BACKUP_DIR = path.join(__dirname, 'data', 'backups');
 
-const BACKUP_FILES = ['users', 'music-db', 'trending', 'corrections', 'session-history', 'flagged-messages'];
+const BACKUP_FILES = ['users', 'music-db', 'trending', 'corrections', 'session-history', 'flagged-messages', 'requests', 'wordfilter', 'clips', 'invites', 'audit', 'chat-history'];
 
 function backupUsers() {
   const DATA_DIR = path.join(__dirname, 'data');

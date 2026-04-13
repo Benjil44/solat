@@ -27,14 +27,16 @@ public/            static files served at /
   index.html       login / register
   fonts/           Material Symbols Outlined (local, no CDN)
   hls.min.js       HLS.js (local copy)
-  sw.js            service worker v3
+  sw.js            service worker v6
 data/              JSON data files (users, requests, chat, clips, etc.)
 media/             HLS segments + recordings (not in git)
 ```
 
 ## Environment Variables (.env)
 Required: `VAPID_PUBLIC_KEY`, `VAPID_SECRET_KEY`, `ADMIN_KEY`, `JWT_SECRET`, `STREAM_KEY`
-Optional: `FFMPEG_PATH`, `DISCORD_WEBHOOK_URL`, `SITE_URL`, `INVITE_ONLY`, `GUEST_WATCH`, `STRIPE_*`
+Optional: `FFMPEG_PATH`, `DISCORD_WEBHOOK_URL`, `SITE_URL`, `INVITE_ONLY`, `GUEST_WATCH`
+Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `STRIPE_ACCESS_DAYS`,
+        `STRIPE_CURRENCY`, `STRIPE_MODE` (payment|subscription), `STRIPE_ALLOW_PROMO` (true)
 
 ## Architecture
 - Auth: JWT in httpOnly cookie; admin via `x-admin-key` header or `adminKey` cookie
@@ -52,6 +54,16 @@ Optional: `FFMPEG_PATH`, `DISCORD_WEBHOOK_URL`, `SITE_URL`, `INVITE_ONLY`, `GUES
 - Toast messages via `toast(msg, isError)` in dj.html / watch.html
 - Data persistence: JSON files with atomic write (tmp → rename)
 - Admin API routes use `requireAdmin` middleware; user routes use `requireAuth`
+
+## Key Pages
+- `/pricing.html` — Stripe subscription page (shows live price from API)
+- `/reset-password.html` — self-service password reset via admin-issued token
+- `/watch.html` — viewer page; tip modal, queue position toast, @mention notifications
+- `/profile.html` — watch stats (time watched, sessions attended), subscription management
+
+## Admin Panel Sections (admin.html)
+Stats · Stream Key · Users (bulk actions: extend/suspend/delete) · Invites · Recordings ·
+Sessions · Corrections · Music DB · Muted · Word Filter · Schedule · Announce+Push · Requests · Audit
 
 ## Do Not
 - Do not add CDN links for fonts or JS — serve locally
