@@ -109,4 +109,9 @@ async function notifyRequestAccepted(username, title) {
   }
 }
 
-module.exports = { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted };
+/** Send a custom push to all subscribers (no pref filter — admin override). */
+async function notifyCustom(title, body) {
+  await _broadcast({ title, body, url: '/watch.html' }, null);
+}
+
+module.exports = { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted, notifyCustom };

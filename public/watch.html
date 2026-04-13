@@ -1495,6 +1495,26 @@
       sessionStorage.setItem('expiryDismissed', '1');
     }
 
+    // ── @mention browser notifications ───────────────────────────────────────
+    // Request notification permission lazily (only when first needed).
+    let _notifPermission = Notification?.permission || 'default';
+    async function fireMentionNotification(sender, text) {
+      if (!('Notification' in window)) return;
+      if (_notifPermission === 'denied') return;
+      if (_notifPermission !== 'granted') {
+        _notifPermission = await Notification.requestPermission();
+        if (_notifPermission !== 'granted') return;
+      }
+      try {
+        new Notification(`@mentioned by ${sender}`, {
+          body:    text.length > 80 ? text.slice(0, 77) + '…' : text,
+          icon:    '/icon.svg',
+          tag:     'mention',   // replace older mention notifications rather than stacking
+          silent:  false,
+        });
+      } catch {}
+    }
+
     async function saveClip() {
       const btn = document.getElementById('clip-btn');
       if (btn) btn.disabled = true;
@@ -1700,6 +1720,9 @@
         if (isMentioned) div.classList.add('mentioned');
         const avatarSpan = msg.avatar ? `<span class="msg-avatar">${esc(msg.avatar)}</span>` : '';
         div.innerHTML = `${avatarSpan}<span class="who">${esc(msg.username)}:</span>${renderText(msg.text)}${timeSpan}`;
+
+        // Browser notification when @mentioned and tab is not focused
+        if (isMentioned && document.hidden) fireMentionNotification(msg.username, msg.text);
       }
 
       el.appendChild(div);
@@ -1872,8 +1895,19 @@
           body: JSON.stringify({ title })
         });
         const d = await res.json();
-        if (res.ok) { input.value = ''; hideSuggestions(); }
-        else { showReqError(d.error || 'Could not submit request'); }
+        if (res.ok) {
+          input.value = '';
+          hideSuggestions();
+          if (d.autoVoted) {
+            toast(d.voted
+              ? `Already in queue at #${d.position} — your upvote was added!`
+              : `Already in queue at #${d.position}`);
+          } else if (d.position) {
+            toast(`Request submitted — you're #${d.position} in queue`);
+          }
+        } else {
+          showReqError(d.error || 'Could not submit request');
+        }
       } catch { showReqError('Network error — try again'); }
       btn.disabled = false;
     }

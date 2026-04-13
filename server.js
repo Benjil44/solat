@@ -23,7 +23,7 @@ const { setChatBan } = require('./src/users');
 const { banRecord, clearRecord: clearFlagged, getAll: getAllFlagged } = require('./src/flagged');
 const { addRequest, voteRequest, reactRequest, setStatus: setReqStatus, removeRequest, clearFinished, getRequests, getTrending, cleanupExpired, moveRequest, getAcceptedQueue } = require('./src/requests');
 const { resetStats, recordViewerCount, getStats } = require('./src/stats');
-const { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted } = require('./src/push');
+const { saveSub, removeSub, notifyLive, notifyNextTrack, notifyRequestAccepted, notifyCustom } = require('./src/push');
 const { updatePushPrefs, getPushPrefs } = require('./src/users');
 const { logAudit, getAuditLog } = require('./src/audit');
 const { updatePassword } = require('./src/users');
@@ -697,6 +697,20 @@ app.delete('/api/admin/music-db/entry/:title', requireAdmin, (req, res) => {
 app.post('/api/admin/push-test', requireAdmin, async (req, res) => {
   try {
     await notifyLive('Test — push notifications are working!');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Custom push broadcast — admin sends a push with any title/body to all subscribers
+app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
+  const title = String(req.body.title || '').trim();
+  const body  = String(req.body.body  || '').trim();
+  if (!title) return res.status(400).json({ error: 'Title required' });
+  try {
+    await notifyCustom(title, body);
+    logAudit('admin', 'push-broadcast', { title, body });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

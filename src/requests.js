@@ -53,7 +53,10 @@ function addRequest(username, title) {
   if (dup) {
     const v = voteRequest(dup.id, username);
     _lastRequest.set(username, now);
-    return { ok: true, autoVoted: true, request: dup, voted: v.voted };
+    const pending  = _requests.filter(r => r.status === 'pending');
+    pending.sort((a, b) => b.votes - a.votes || new Date(a.requestedAt) - new Date(b.requestedAt));
+    const position = pending.findIndex(r => r.id === dup.id) + 1;
+    return { ok: true, autoVoted: true, request: dup, voted: v.voted, position };
   }
 
   const active = _requests.filter(r => r.status === 'pending' || r.status === 'accepted').length;
@@ -72,7 +75,13 @@ function addRequest(username, title) {
   };
   _requests.unshift(req);
   incrementRequests();
-  return { ok: true, request: req };
+
+  // Compute queue position (1-based) among pending requests sorted by votes desc
+  const pending = _requests.filter(r => r.status === 'pending');
+  pending.sort((a, b) => b.votes - a.votes || new Date(a.requestedAt) - new Date(b.requestedAt));
+  const position = pending.findIndex(r => r.id === req.id) + 1;
+
+  return { ok: true, request: req, position };
 }
 
 /**

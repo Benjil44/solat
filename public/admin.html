@@ -701,6 +701,24 @@
       <button class="btn-sm btn-extend" onclick="sendAnnouncement()">Send</button>
     </div>
     <div class="form-msg" id="announce-msg" style="margin-top:6px;min-height:1em;font-size:.8em"></div>
+
+    <!-- Push broadcast -->
+    <div style="margin-top:18px;border-top:1px solid #1e1e1e;padding-top:14px">
+      <div style="font-size:.72em;font-weight:bold;letter-spacing:2px;color:#888;text-transform:uppercase;margin-bottom:10px">🔔 Push Notification (to all subscribers)</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <input id="push-title" type="text" maxlength="80" placeholder="Title…"
+          style="background:#111;border:1px solid #2a2a2a;border-radius:7px;
+                 color:#ccc;padding:7px 12px;font-size:.85em;outline:none">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="push-body" type="text" maxlength="200" placeholder="Body (optional)…"
+            onkeydown="if(event.key==='Enter')sendPushBroadcast()"
+            style="flex:1;background:#111;border:1px solid #2a2a2a;border-radius:7px;
+                   color:#ccc;padding:7px 12px;font-size:.85em;outline:none">
+          <button class="btn-sm btn-extend" onclick="sendPushBroadcast()">Send</button>
+        </div>
+      </div>
+      <div class="form-msg" id="push-broadcast-msg" style="margin-top:6px;min-height:1em;font-size:.8em"></div>
+    </div>
   </div>
 
   <!-- Request History -->
@@ -1641,6 +1659,29 @@
       } else {
         msg.style.color = '#ff6666';
         msg.textContent = 'Failed to send';
+      }
+    }
+
+    async function sendPushBroadcast() {
+      const title = document.getElementById('push-title').value.trim();
+      const body  = document.getElementById('push-body').value.trim();
+      const msg   = document.getElementById('push-broadcast-msg');
+      if (!title) { msg.style.color = '#ff6666'; msg.textContent = 'Title required'; return; }
+      const res = await fetch('/api/admin/push-broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        document.getElementById('push-title').value = '';
+        document.getElementById('push-body').value  = '';
+        msg.style.color = '#44cc88';
+        msg.textContent = 'Push sent to all subscribers';
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      } else {
+        msg.style.color = '#ff6666';
+        msg.textContent = d.error || 'Push failed';
       }
     }
 
