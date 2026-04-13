@@ -14,7 +14,7 @@ const helmet      = require('helmet');
 const authRoutes    = require('./src/auth');
 const adminRoutes   = require('./src/admin');
 const paymentRoutes = require('./src/payment');
-const { verifyToken, findUser, getSubscriptionStatus, listResetRequests } = require('./src/users');
+const { verifyToken, findUser, getSubscriptionStatus, listResetRequests, incrementWatchTime, markSessionAttended } = require('./src/users');
 const { setupStreamWS, getStreamTitle, setStreamTitle, isBrowserLive, getBroadcastMode, isManifestReady, getCurrentRecording, getSessionStartTime, getSetlist, stopFFmpegOnExit, getSessionHistory } = require('./src/stream-ws');
 const { setupChatWS, getChatClientCount, djAnnounce, broadcastRequests, broadcastAll, getChatHistoryForUser } = require('./src/chat-ws');
 const { learnTrack: _learn, suggest, submitCorrection, acceptCorrection, rejectCorrection, getCorrections, getDB: getMusicDB, manualAddTrack, removeTrack: removeDBTrack } = require('./src/music-db');
@@ -174,7 +174,14 @@ const viewers = new Map();
 
 const heartbeatLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
 app.post('/api/heartbeat', heartbeatLimiter, requireAuth, (req, res) => {
-  viewers.set(req.user.username, Date.now());
+  const username = req.user.username;
+  viewers.set(username, Date.now());
+  // Track watch time and session attendance only while stream is live
+  if (isLive || isBrowserLive()) {
+    incrementWatchTime(username, 15);                 // heartbeat fires every 15s
+    const sessionKey = getSessionStartTime();
+    if (sessionKey) markSessionAttended(username, sessionKey);
+  }
   res.json({ ok: true });
 });
 
@@ -506,8 +513,17 @@ app.get('/api/profile', requireAuth, (req, res) => {
     played:   allUserReqs.filter(r => r.status === 'played').length,
     rejected: allUserReqs.filter(r => r.status === 'rejected').length,
   };
+  const freshUser = findUser(user.username) || {};
   res.json({
-    user: { username: user.username, subType, daysLeft, registeredAt: user.registeredAt, avatar: user.avatar || '', pushPrefs: getPushPrefs(user.username) },
+    user: {
+      username:          user.username,
+      subType, daysLeft,
+      registeredAt:      user.registeredAt,
+      avatar:            user.avatar || '',
+      pushPrefs:         getPushPrefs(user.username),
+      watchSeconds:      freshUser.watchSeconds      || 0,
+      sessionsAttended:  (freshUser.sessionsAttended || []).length,
+    },
     requests: userRequests,
     stats,
   });

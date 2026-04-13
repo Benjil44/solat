@@ -153,6 +153,26 @@ function listResetRequests() {
     .map(u => ({ username: u.username, token: u.resetToken, requestedAt: u.resetRequestedAt, expires: u.resetExpires }));
 }
 
+// ─── Watch time / session tracking ───────────────────────────────────────────
+function incrementWatchTime(username, seconds) {
+  const users = loadUsers();
+  if (!users[username]) return;
+  users[username].watchSeconds = (users[username].watchSeconds || 0) + seconds;
+  saveUsers(users);
+}
+
+// Track unique session attendance. sessionKey is a string (e.g. stream start ISO).
+function markSessionAttended(username, sessionKey) {
+  const users = loadUsers();
+  if (!users[username]) return;
+  const attended = users[username].sessionsAttended || [];
+  if (!attended.includes(sessionKey)) {
+    attended.push(sessionKey);
+    users[username].sessionsAttended = attended;
+    saveUsers(users);
+  }
+}
+
 function saveStripeCustomer(username, customerId) {
   const users = loadUsers();
   if (!users[username]) return false;
@@ -206,4 +226,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, updatePushPrefs, getPushPrefs, extendSubscription, setSuspended, setChatBan, saveStripeCustomer, saveResetToken, consumeResetToken, listResetRequests, createToken, verifyToken, getSubscriptionStatus };
+module.exports = { createUser, findUser, deleteUser, updatePassword, updateAvatar, updatePushPrefs, getPushPrefs, extendSubscription, setSuspended, setChatBan, saveStripeCustomer, saveResetToken, consumeResetToken, listResetRequests, incrementWatchTime, markSessionAttended, createToken, verifyToken, getSubscriptionStatus };

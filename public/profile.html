@@ -149,6 +149,15 @@
       </div>
     </div>
 
+    <!-- Watch stats -->
+    <div class="action-card" id="watch-stats-card" style="display:none;padding:16px 24px;margin-bottom:0">
+      <div class="action-card-title">Watch Stats</div>
+      <div class="stats-row">
+        <div class="mini-stat"><div class="mval" id="ws-time">0</div><div class="mlbl">Time Watched</div></div>
+        <div class="mini-stat"><div class="mval" id="ws-sessions">0</div><div class="mlbl">Sessions</div></div>
+      </div>
+    </div>
+
     <!-- Avatar picker -->
     <div class="action-card" style="padding:16px 24px">
       <div class="action-card-title">Your Avatar</div>
@@ -354,6 +363,17 @@
           document.getElementById('p-manage-btn').style.display = 'inline-block';
         }
       }).catch(() => {});
+
+      // Watch stats
+      if (user.watchSeconds > 0 || user.sessionsAttended > 0) {
+        document.getElementById('watch-stats-card').style.display = 'block';
+        const s = user.watchSeconds || 0;
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        document.getElementById('ws-time').textContent =
+          h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m` : `${s}s`;
+        document.getElementById('ws-sessions').textContent = user.sessionsAttended || 0;
+      }
 
       if (stats && stats.total > 0) {
         document.getElementById('p-stats-row').style.display = 'flex';

@@ -547,10 +547,27 @@
   <div class="content" id="sec-users">
     <div class="section-title">Users</div>
     <input type="text" class="user-search" id="user-search" placeholder="Filter by username…" oninput="renderUsers()">
+    <!-- Bulk actions toolbar — shown when ≥1 user is selected -->
+    <div id="bulk-toolbar" style="display:none;margin:8px 0;display:none;align-items:center;gap:8px;flex-wrap:wrap;
+         padding:8px 10px;background:#111;border:1px solid #2a2a2a;border-radius:8px">
+      <span id="bulk-count" style="font-size:.8em;color:#888;flex-shrink:0">0 selected</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <input id="bulk-days" type="number" min="1" max="365" value="30" placeholder="Days"
+          style="width:64px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:5px;
+                 color:#ccc;padding:5px 8px;font-size:.82em;outline:none">
+        <button class="btn-sm btn-extend" onclick="bulkAction('extend')">Extend</button>
+        <button class="btn-sm" onclick="bulkAction('suspend')"
+          style="border-color:#664400;color:#cc7700">Suspend</button>
+        <button class="btn-sm" onclick="bulkAction('unsuspend')"
+          style="border-color:#224400;color:#44aa00">Unsuspend</button>
+        <button class="btn-sm btn-danger" onclick="bulkAction('delete')">Delete</button>
+      </div>
+    </div>
     <div class="table-wrap">
       <table id="users-table">
         <thead>
           <tr>
+            <th style="width:28px"><input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)" title="Select all"></th>
             <th>Username</th>
             <th>Registered</th>
             <th>Status</th>
@@ -560,7 +577,7 @@
           </tr>
         </thead>
         <tbody id="users-tbody">
-          <tr><td colspan="6" class="empty">Loading...</td></tr>
+          <tr><td colspan="7" class="empty">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -917,7 +934,8 @@
       document.getElementById('stat-expired').textContent = users.filter(u => u.status === 'expired').length;
 
       if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">${q ? 'No users match your search' : 'No users yet'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">${q ? 'No users match your search' : 'No users yet'}</td></tr>`;
+        updateBulkToolbar();
         return;
       }
 
@@ -931,6 +949,7 @@
           : `<button class="btn-suspend"   onclick="toggleSuspend('${esc(u.username)}', true)">Suspend</button>`;
         return `
         <tr>
+          <td><input type="checkbox" class="user-cb" data-user="${esc(u.username)}" onchange="updateBulkToolbar()"></td>
           <td><strong>${esc(u.username)}</strong></td>
           <td style="color:#888">${fmtDate(u.registeredAt)}</td>
           <td>${statusBadge}</td>
@@ -947,6 +966,55 @@
           </td>
         </tr>`;
       }).join('');
+      updateBulkToolbar();
+    }
+
+    function getSelectedUsers() {
+      return [...document.querySelectorAll('.user-cb:checked')].map(cb => cb.dataset.user);
+    }
+
+    function toggleSelectAll(checked) {
+      document.querySelectorAll('.user-cb').forEach(cb => cb.checked = checked);
+      updateBulkToolbar();
+    }
+
+    function updateBulkToolbar() {
+      const sel     = getSelectedUsers();
+      const toolbar = document.getElementById('bulk-toolbar');
+      const allCb   = document.getElementById('select-all-cb');
+      const total   = document.querySelectorAll('.user-cb').length;
+      toolbar.style.display = sel.length ? 'flex' : 'none';
+      document.getElementById('bulk-count').textContent = `${sel.length} selected`;
+      if (allCb) allCb.indeterminate = sel.length > 0 && sel.length < total;
+      if (allCb) allCb.checked = total > 0 && sel.length === total;
+    }
+
+    async function bulkAction(action) {
+      const selected = getSelectedUsers();
+      if (!selected.length) return;
+      if (action === 'delete' && !confirm(`Delete ${selected.length} user(s)? This cannot be undone.`)) return;
+      const days = parseInt(document.getElementById('bulk-days')?.value, 10) || 30;
+      let ok = 0, fail = 0;
+      for (const username of selected) {
+        try {
+          let res;
+          if (action === 'extend') {
+            res = await fetch('/admin/extend', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, days })
+            });
+          } else if (action === 'suspend') {
+            res = await fetch(`/admin/users/${encodeURIComponent(username)}/suspend`, { method: 'PATCH' });
+          } else if (action === 'unsuspend') {
+            res = await fetch(`/admin/users/${encodeURIComponent(username)}/unsuspend`, { method: 'PATCH' });
+          } else if (action === 'delete') {
+            res = await fetch(`/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+          }
+          if (res && res.ok) ok++; else fail++;
+        } catch { fail++; }
+      }
+      toast(`Bulk ${action}: ${ok} done${fail ? ', ' + fail + ' failed' : ''}`);
+      await loadUsers();
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────

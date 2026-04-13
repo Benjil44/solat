@@ -1906,7 +1906,10 @@
             toast(`Request submitted — you're #${d.position} in queue`);
           }
         } else {
-          showReqError(d.error || 'Could not submit request');
+          const err = d.error || 'Could not submit request';
+          // Cooldown errors are more visible as a toast
+          if (err.startsWith('Wait ')) toast(err, true);
+          else showReqError(err);
         }
       } catch { showReqError('Network error — try again'); }
       btn.disabled = false;
